@@ -139,9 +139,8 @@ def main():
     from core.node import P2PNode
     from ui.menu import (
         main_menu, cls,
-        screen_start, screen_peers, screen_send,
-        screen_history, screen_sysinfo, screen_destruct,
-        screen_formats,
+        screen_start, screen_peers, screen_add_peer, screen_send,
+        screen_profile, screen_formats, screen_destruct,
         err, warn, C,
     )
 
@@ -160,13 +159,13 @@ def main():
                 screen_peers(node)
 
             elif choice == '3':
-                screen_send(node)
+                screen_add_peer(node)
 
             elif choice == '4':
-                screen_history(node)
+                screen_send(node)
 
             elif choice == '5':
-                screen_sysinfo(node)
+                screen_profile(node)
 
             elif choice == '6':
                 screen_formats()

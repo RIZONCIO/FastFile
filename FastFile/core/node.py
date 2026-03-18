@@ -141,6 +141,17 @@ class P2PNode:
             return []
         return self.registry.all_alive()
 
+    def add_peer_manual(self, ip: str, port: int = None) -> bool:
+        """
+        Adiciona peer manualmente por IP — permite conexão entre
+        redes diferentes desde que haja roteamento (VPN, port forward, etc.).
+        """
+        if not self.registry:
+            return False
+        from core.network import SERVICE_PORT as _PORT
+        peer = self.registry.add_manual(ip, port or _PORT)
+        return peer is not None
+
     # ──────────────────────────────────────────
     #  Envio de arquivos
     # ──────────────────────────────────────────

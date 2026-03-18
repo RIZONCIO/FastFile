@@ -38,8 +38,8 @@ SERVICE_TYPE     = "_p2psec._tcp.local."
 SERVICE_PORT     = 55771          # Porta não-padrão para menor visibilidade
 DISCOVERY_PORT   = SERVICE_PORT + 1337
 BUFFER_SIZE      = 65536
-PEER_TIMEOUT     = 60             # segundos sem ping → peer considerado offline
-PING_INTERVAL    = 15             # segundos entre pings
+PEER_TIMEOUT     = 120            # segundos sem heartbeat → peer offline
+PING_INTERVAL    = 20             # segundos entre pings de keepalive
 
 
 # ─────────────────────────────────────────────
@@ -171,6 +171,25 @@ class PeerRegistry:
         if is_new and self._on_new:
             self._on_new(peer)
 
+    def touch_by_id(self, node_id: str):
+        """Atualiza last_seen de um peer existente (keepalive)"""
+        with self._lock:
+            if node_id in self._peers:
+                self._peers[node_id].touch()
+
+    def add_manual(self, ip: str, port: int) -> 'Peer':
+        """
+        Adiciona peer manualmente por IP:porta (para redes diferentes/VPN).
+        Retorna o Peer criado com node_id temporário até handshake.
+        """
+        temp_id = f"manual-{ip.replace('.', '-')}-{port}"
+        with self._lock:
+            if temp_id in self._peers:
+                return self._peers[temp_id]
+        peer = Peer(temp_id, f"manual@{ip}", ip, port)
+        self.add_or_update(peer)
+        return peer
+
     def get(self, node_id: str) -> Optional[Peer]:
         with self._lock:
             return self._peers.get(node_id)
@@ -272,6 +291,7 @@ class P2PServer:
 class DiscoveryManager:
     """
     Gerencia descoberta de peers via Zeroconf (mDNS) ou broadcast UDP.
+    Inclui heartbeat UDP permanente para manter peers vivos.
     """
 
     def __init__(self, node_id: str, alias: str, fingerprint: str,
@@ -287,6 +307,9 @@ class DiscoveryManager:
 
     def start(self) -> str:
         self._running = True
+        # Iniciar heartbeat independente do modo de descoberta
+        threading.Thread(target=self._heartbeat_loop, daemon=True,
+                         name="Heartbeat").start()
         if ZEROCONF_AVAILABLE:
             return self._start_zeroconf()
         else:
@@ -300,6 +323,77 @@ class DiscoveryManager:
                 self._zc.close()
             except Exception:
                 pass
+
+    def _heartbeat_loop(self):
+        """
+        Envia ping UDP leve para todos os peers conhecidos a cada PING_INTERVAL s.
+        Também responde pings recebidos — mantém last_seen atualizado dos dois lados
+        sem abrir/fechar conexão TCP.
+        """
+        HBEAT_PORT = DISCOVERY_PORT + 1
+
+        # Socket de escuta de pings recebidos
+        def _listen():
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('', HBEAT_PORT))
+                s.settimeout(1.0)
+                while self._running:
+                    try:
+                        data, addr = s.recvfrom(512)
+                        msg = json.loads(data.decode())
+                        nid = msg.get('nid', '')
+                        if nid and nid != self.node_id:
+                            # Atualizar last_seen do peer que nos pingou
+                            self.registry.touch_by_id(nid)
+                            # Se é novo, registrar
+                            alias = msg.get('alias', 'unknown')
+                            fp    = msg.get('fp', '')
+                            p_port = msg.get('port', SERVICE_PORT)
+                            existing = self.registry.get(nid)
+                            if not existing:
+                                self.registry.add_or_update(
+                                    Peer(nid, alias, addr[0], p_port, fp)
+                                )
+                            # Responder pong
+                            pong = json.dumps({
+                                'nid': self.node_id, 'alias': self.alias,
+                                'fp': self.fingerprint, 'port': self.port,
+                                'type': 'pong'
+                            }).encode()
+                            s.sendto(pong, addr)
+                    except (socket.timeout, json.JSONDecodeError):
+                        pass
+                    except Exception:
+                        pass
+                s.close()
+            except Exception:
+                pass
+
+        threading.Thread(target=_listen, daemon=True, name="HbeatListen").start()
+
+        # Sender de pings para todos os peers conhecidos
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            ping_data = json.dumps({
+                'nid':   self.node_id,
+                'alias': self.alias,
+                'fp':    self.fingerprint,
+                'port':  self.port,
+                'type':  'ping',
+            }).encode()
+
+            while self._running:
+                for peer in self.registry.all_alive():
+                    try:
+                        s.sendto(ping_data, (peer.ip, HBEAT_PORT))
+                    except Exception:
+                        pass
+                time.sleep(PING_INTERVAL)
+            s.close()
+        except Exception:
+            pass
 
     def _start_zeroconf(self) -> str:
         try:

@@ -127,9 +127,9 @@ def main_menu(node_started: bool, peer_count: int, alias: str) -> str:
     print(hr())
     print(f"  {C['B']}[1]{C['RST']}  🚀  Iniciar nó P2P")
     print(f"  {C['B']}[2]{C['RST']}  👥  Ver quem está na rede")
-    print(f"  {C['B']}[3]{C['RST']}  📤  Enviar arquivo(s)")
-    print(f"  {C['B']}[4]{C['RST']}  📋  Histórico de transferências")
-    print(f"  {C['B']}[5]{C['RST']}  ℹ️   Informações do sistema")
+    print(f"  {C['B']}[3]{C['RST']}  🔗  Adicionar peer manualmente (IP)")
+    print(f"  {C['B']}[4]{C['RST']}  📤  Enviar arquivo(s)")
+    print(f"  {C['B']}[5]{C['RST']}  🪪  Perfil anônimo & histórico")
     print(f"  {C['Y']}[6]{C['RST']}  📂  Formatos suportados / bloqueados")
     print(f"  {C['R']}[7]{C['RST']}  💣  AUTO-DESTRUIÇÃO")
     print(f"  {C['DIM']}[8]{C['RST']}  🚪  Sair")
@@ -231,6 +231,7 @@ def screen_send(node):
     peers = node.list_peers()
     if not peers:
         warn("Nenhum peer disponível.")
+        info("Use [2] para ver peers automáticos ou [3] para adicionar por IP.")
         pause()
         return
 
@@ -388,60 +389,112 @@ def _send_batch(node, peer):
 
 
 # ─────────────────────────────────────────────
-#  Tela: histórico
+#  Tela: adicionar peer por IP (redes diferentes)
 # ─────────────────────────────────────────────
 
-def screen_history(node):
+def screen_add_peer(node):
     cls()
-    print(title("HISTÓRICO DE TRANSFERÊNCIAS"))
+    print(title("ADICIONAR PEER MANUALMENTE"))
 
-    history = node.get_history()
-    if not history:
-        warn("Nenhuma transferência registrada nesta sessão.")
+    if not node._started:
+        warn("Nó não iniciado. Use a opção [1] primeiro.")
         pause()
         return
 
-    for r in reversed(history[-30:]):
-        print(r.display())
+    section("Conexão por IP direto")
+    print(f"  {C['DIM']}Use quando o peer está em outra rede (VPN, port forward, IP público).{C['RST']}")
+    print(f"  {C['DIM']}Na mesma rede local, a descoberta automática já funciona.{C['RST']}\n")
 
-    print()
-    info(f"Total na sessão: {len(history)} transferência(s)")
+    ip = prompt("IP do peer (ex: 192.168.0.10 ou 203.0.113.5)").strip()
+    if not ip:
+        warn("IP vazio. Cancelado.")
+        pause()
+        return
+
+    from core.network import SERVICE_PORT
+    port_str = prompt(f"Porta", str(SERVICE_PORT))
+    try:
+        port = int(port_str)
+    except ValueError:
+        err("Porta inválida.")
+        pause()
+        return
+
+    ok_add = node.add_peer_manual(ip, port)
+    if ok_add:
+        ok(f"Peer adicionado: {ip}:{port}")
+        info("O heartbeat vai confirmar se ele está online em até 20s.")
+        info("Use [2] para ver a lista de peers.")
+    else:
+        err("Falha ao adicionar peer. Nó iniciado?")
     pause()
 
 
 # ─────────────────────────────────────────────
-#  Tela: info do sistema
+#  Tela: perfil anônimo + histórico (unificado)
 # ─────────────────────────────────────────────
 
-def screen_sysinfo(node):
+def screen_profile(node):
     cls()
-    print(title("INFORMAÇÕES DO SISTEMA"))
+    print(title("PERFIL ANONIMO & HISTORICO"))
 
     si = node.system_info()
-    section("Identidade (anônima)")
-    info(f"Node ID       : {si['node_id']}")
-    info(f"Alias         : {si['alias']}")
-    info(f"Fingerprint   : {si['fingerprint'] or '(não iniciado)'}")
 
-    section("Rede")
-    info(f"IPs locais    : {', '.join(si['ips'])}")
-    info(f"Porta TCP     : {si['port']}")
-    info(f"Status        : {'ONLINE' if si['running'] else 'OFFLINE'}")
+    # ── Identidade ──
+    section("🪪  Identidade anônima")
+    info(f"Node ID     : {C['W']}{si['node_id']}{C['RST']}")
+    info(f"Alias       : {C['W']}{si['alias']}{C['RST']}")
+    fp = si['fingerprint'] or '(inicie o nó para gerar)'
+    info(f"Fingerprint : {C['W']}{fp}{C['RST']}")
+    print(f"\n  {C['DIM']}O alias e o Node ID são gerados aleatoriamente — sem relação{C['RST']}")
+    print(f"  {C['DIM']}com seu nome, hostname, MAC ou qualquer dado pessoal.{C['RST']}")
 
-    section("Segurança")
-    info(f"TLS           : 1.3 obrigatório")
-    info(f"Criptografia  : AES-256-GCM (dados)  +  TLS (transporte)")
-    info(f"Integridade   : HMAC-SHA256 por arquivo")
-    info(f"Módulo crypto : {'✔ cryptography' if si['crypto'] else '✘ não instalado'}")
+    # ── Rede ──
+    section("🌐  Rede & segurança")
+    status_str = f"{C['G']}ONLINE{C['RST']}" if si['running'] else f"{C['Y']}OFFLINE{C['RST']}"
+    info(f"Status      : {status_str}")
+    info(f"IPs locais  : {', '.join(si['ips'])}")
+    info(f"Porta TCP   : {si['port']}")
+    info(f"TLS         : 1.3  |  Cifra: AES-256-GCM + ChaCha20 (negociado)")
+    info(f"Integridade : HMAC-SHA256 por arquivo")
+    info(f"Compressão  : zlib nível 6  (obrigatória)")
+    info(f"Crypto lib  : {'✔ cryptography' if si['crypto'] else '✘ não instalado'}")
 
-    section("Arquivos")
-    info(f"Downloads     : {si['downloads']}")
-    info(f"Work dir      : {si['work_dir']}")
+    # ── Arquivos ──
+    section("📁  Armazenamento")
+    info(f"Downloads   : {si['downloads']}")
+    info(f"Work dir    : {si['work_dir']}")
+    info(f"Plataforma  : {si['platform']}")
 
-    section("Plataforma")
-    info(f"Sistema       : {si['platform']}")
+    # ── Histórico ──
+    section("📋  Histórico de transferências (sessão atual)")
+    history = node.get_history()
+    if not history:
+        print(f"  {C['DIM']}  Nenhuma transferência registrada ainda.{C['RST']}")
+    else:
+        for r in reversed(history[-20:]):
+            print(r.display())
+        print()
+        sent_n = sum(1 for r in history if r.direction == 'sent')
+        recv_n = len(history) - sent_n
+        ok_n   = sum(1 for r in history if r.success)
+        total_bytes = sum(r.size for r in history if r.success)
+        info(f"Total: {len(history)} transferência(s)  |  "
+             f"📤 {sent_n} enviados  📥 {recv_n} recebidos  "
+             f"|  ✔ {ok_n} OK  "
+             f"|  {_fmt_bytes(total_bytes)} trafegados")
 
     pause()
+
+
+def _fmt_bytes(n: int) -> str:
+    if n >= 1024**3:
+        return f"{n/1024**3:.1f} GB"
+    if n >= 1024**2:
+        return f"{n/1024**2:.1f} MB"
+    if n >= 1024:
+        return f"{n/1024:.1f} KB"
+    return f"{n} B"
 
 
 # ─────────────────────────────────────────────
