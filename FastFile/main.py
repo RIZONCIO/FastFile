@@ -10,8 +10,8 @@ import os
 import subprocess
 import platform
 
-APP_NAME = "FastFile"
-APP_VERSION = "1.5"
+APP_NAME    = "FastFile"
+APP_VERSION = "3.1"
 
 # ─────────────────────────────────────────────
 #  Verificação de Python
@@ -21,11 +21,16 @@ if sys.version_info < (3, 8):
     print(f"[{APP_NAME}] ERRO: Python 3.8+ necessário. Versão atual: {sys.version}")
     sys.exit(1)
 
+# ─────────────────────────────────────────────
+#  Dependências — instaladas ANTES de qualquer
+#  import interno ou início da CLI
+# ─────────────────────────────────────────────
+
 REQUIRED = {
-    "cryptography": "cryptography>=41.0",
-    "colorama": "colorama>=0.4",
-    "netifaces": "netifaces>=0.11",
-    "zeroconf": "zeroconf>=0.60",
+    'cryptography': 'cryptography>=41.0',
+    'colorama':     'colorama>=0.4',
+    'netifaces':    'netifaces>=0.11',
+    'zeroconf':     'zeroconf>=0.60',
 }
 
 _WIDTH = 54
@@ -52,36 +57,28 @@ def _pip_install(package: str) -> bool:
     """Tenta instalar via pip. Retorna True se bem-sucedido."""
     # Tentativa 1 — padrão
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            package,
-            "--disable-pip-version-check",
-        ],
-        capture_output=False,  # mostra output do pip em tempo real
+        [sys.executable, "-m", "pip", "install", package,
+         "--disable-pip-version-check"],
+        capture_output=False,   # mostra output do pip em tempo real
     )
     if result.returncode == 0:
         return True
 
     # Tentativa 2 — --user (ambientes sem permissão de sistema)
     result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            package,
-            "--user",
-            "--disable-pip-version-check",
-        ],
+        [sys.executable, "-m", "pip", "install", package,
+         "--user", "--disable-pip-version-check"],
         capture_output=False,
     )
     return result.returncode == 0
 
 
 def ensure_dependencies():
+    """
+    Verifica e instala todas as dependências necessárias.
+    Roda ANTES de qualquer import dos módulos do FastFile.
+    Mostra progresso e resultado claramente no terminal.
+    """
     missing = {mod: pkg for mod, pkg in REQUIRED.items() if not _try_import(mod)}
 
     if not missing:
@@ -89,18 +86,16 @@ def ensure_dependencies():
         print(f"\033[92m[{APP_NAME}] Dependências OK — iniciando...\033[0m\n")
         return
 
-    os.system("cls" if platform.system() == "Windows" else "clear")
-    _box(
-        [
-            f"{APP_NAME} v{APP_VERSION}  —  Instalando dependências",
-            "",
-            "Isso ocorre apenas na PRIMEIRA execução.",
-            "As próximas inicializações serão instantâneas.",
-            "",
-            f"Plataforma: {platform.system()} {platform.release()}",
-            f"Python    : {sys.version.split()[0]}",
-        ]
-    )
+    os.system('cls' if platform.system() == 'Windows' else 'clear')
+    _box([
+        f"{APP_NAME} v{APP_VERSION}  —  Instalando dependências",
+        "",
+        "Isso ocorre apenas na PRIMEIRA execução.",
+        "As próximas inicializações serão instantâneas.",
+        "",
+        f"Plataforma: {platform.system()} {platform.release()}",
+        f"Python    : {sys.version.split()[0]}",
+    ])
     print()
 
     failed = []
@@ -124,21 +119,17 @@ def ensure_dependencies():
         print("\033[91m" + "─" * 56 + "\033[0m")
         input("\nPressione Enter para tentar iniciar mesmo assim...")
     else:
-        _box(
-            [
-                "✔  Todas as dependências foram instaladas!",
-                "",
-                "Pressione Enter para iniciar o FastFile...",
-            ],
-            color_code="\033[92m",
-        )
+        _box([
+            "✔  Todas as dependências foram instaladas!",
+            "",
+            "Pressione Enter para iniciar o FastFile...",
+        ], color_code="\033[92m")
         input()
 
 
 # ─────────────────────────────────────────────
 #  PONTO DE ENTRADA
 # ─────────────────────────────────────────────
-
 
 def main():
     # 1. Instalar deps PRIMEIRO — antes de qualquer import interno
@@ -147,18 +138,11 @@ def main():
     # 2. Só agora importar módulos que dependem dos pacotes instalados
     from core.node import P2PNode
     from ui.menu import (
-        main_menu,
-        cls,
-        screen_start,
-        screen_peers,
-        screen_send,
-        screen_history,
-        screen_sysinfo,
-        screen_destruct,
+        main_menu, cls,
+        screen_start, screen_peers, screen_send,
+        screen_history, screen_sysinfo, screen_destruct,
         screen_formats,
-        err,
-        warn,
-        C,
+        err, warn, C,
     )
 
     node = P2PNode()
@@ -169,28 +153,28 @@ def main():
             alias = node.alias if node._started else "-"
             choice = main_menu(node._started, peer_count, alias)
 
-            if choice == "1":
+            if choice == '1':
                 screen_start(node)
 
-            elif choice == "2":
+            elif choice == '2':
                 screen_peers(node)
 
-            elif choice == "3":
+            elif choice == '3':
                 screen_send(node)
 
-            elif choice == "4":
+            elif choice == '4':
                 screen_history(node)
 
-            elif choice == "5":
+            elif choice == '5':
                 screen_sysinfo(node)
 
-            elif choice == "6":
+            elif choice == '6':
                 screen_formats()
 
-            elif choice == "7":
+            elif choice == '7':
                 screen_destruct(node)
 
-            elif choice == "8":
+            elif choice == '8':
                 cls()
                 print(f"\n  {C['G']}Encerrando FastFile...{C['RST']}")
                 node.shutdown()
@@ -200,7 +184,6 @@ def main():
             else:
                 warn("Opção inválida.")
                 import time
-
                 time.sleep(1)
 
         except KeyboardInterrupt:
@@ -211,7 +194,6 @@ def main():
         except Exception as e:
             err(f"Erro inesperado: {e}")
             import traceback
-
             traceback.print_exc()
             input("  Pressione Enter para continuar...")
 

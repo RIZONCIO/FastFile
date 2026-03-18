@@ -140,7 +140,8 @@ def create_server_ssl_context(node_id: str) -> ssl.SSLContext:
     ctx.load_cert_chain(cert_path, key_path)
     ctx.verify_mode = ssl.CERT_NONE   # Rede P2P — validação por fingerprint
     ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-    ctx.set_ciphers("TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256")
+    # Nota: set_ciphers() não é aplicável a TLS 1.3 — as cifras são
+    # negociadas automaticamente pelo protocolo (AES-256-GCM / ChaCha20)
     return ctx
 
 
@@ -154,7 +155,8 @@ def create_client_ssl_context(node_id: str) -> ssl.SSLContext:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE   # Validação por fingerprint abaixo
     ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-    ctx.set_ciphers("TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256")
+    # Nota: set_ciphers() não é aplicável a TLS 1.3 — as cifras são
+    # negociadas automaticamente pelo protocolo (AES-256-GCM / ChaCha20)
     return ctx
 
 
