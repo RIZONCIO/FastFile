@@ -34,8 +34,9 @@ from core.crypto import (
 #  Constantes
 # ─────────────────────────────────────────────
 
-MAX_SINGLE_FILE  = 500 * 1024 * 1024   # 500 MB por arquivo
-WARN_SIZE_THRESH =  50 * 1024 * 1024   # avisa acima de 50 MB
+MAX_SINGLE_FILE  =  20 * 1024 * 1024   # 20 MB por arquivo
+MAX_BATCH_TOTAL  = 200 * 1024 * 1024   # 200 MB total por lote
+WARN_SIZE_THRESH =  10 * 1024 * 1024   # avisa acima de 10 MB
 CHUNK_SIZE       = 256 * 1024           # 256 KB de chunk de envio
 
 DOWNLOADS_DIR = Path.home() / ".fastfile" / "downloads"
@@ -64,8 +65,6 @@ def check_file_allowed(filepath: Path) -> tuple:
     """
     Verifica se o arquivo pode ser enviado.
     Retorna (allowed: bool, message: str | None).
-    'message' é um aviso (não bloqueia) quando allowed=True,
-    ou o motivo da recusa quando allowed=False.
     """
     ext  = filepath.suffix.lower()
     size = filepath.stat().st_size if filepath.exists() else 0
@@ -79,7 +78,7 @@ def check_file_allowed(filepath: Path) -> tuple:
     if size > MAX_SINGLE_FILE:
         mb = size / 1024 / 1024
         return False, (
-            f"Arquivo excede o limite de {MAX_SINGLE_FILE // 1024 // 1024} MB.\n"
+            f"Arquivo excede o limite de {MAX_SINGLE_FILE // 1024 // 1024} MB por arquivo.\n"
             f"  Tamanho detectado: {mb:.1f} MB — envio recusado."
         )
 
@@ -87,7 +86,7 @@ def check_file_allowed(filepath: Path) -> tuple:
         mb = size / 1024 / 1024
         return True, (
             f"AVISO DE TAMANHO: {filepath.name} tem {mb:.1f} MB.\n"
-            f"  A compressão e o envio podem levar alguns minutos."
+            f"  A compressão e o envio podem levar alguns segundos."
         )
 
     return True, None
@@ -149,35 +148,42 @@ class TransferProgress:
 
 
 # ─────────────────────────────────────────────
-#  Registro de histórico
+#  Resultado de transferência (sem logging/histórico)
 # ─────────────────────────────────────────────
 
-class TransferRecord:
-    def __init__(self, direction: str, filename: str, peer_alias: str,
-                 size: int, success: bool):
-        self.direction  = direction   # 'sent' | 'received'
+class TransferResult:
+    """
+    Resultado imediato de uma transferência.
+    Não é armazenado em disco nem em memória persistente —
+    zero logging para preservar privacidade.
+    """
+    __slots__ = ('filename', 'size', 'success', 'peer_alias', 'direction')
+
+    def __init__(self, filename: str, size: int, success: bool,
+                 peer_alias: str = '', direction: str = 'sent'):
         self.filename   = filename
-        self.peer_alias = peer_alias
         self.size       = size
         self.success    = success
-        self.timestamp  = datetime.now().isoformat(timespec='seconds')
+        self.peer_alias = peer_alias
+        self.direction  = direction
 
     def display(self) -> str:
-        arrow = "📤" if self.direction == "sent" else "📥"
-        status = "✔" if self.success else "✘"
-        size_s = self._fmt_size(self.size)
-        return (f"  {status} {arrow} {self.filename}  "
-                f"({size_s})  ↔ {self.peer_alias}  [{self.timestamp}]")
+        mark  = "✔" if self.success else "✘"
+        sz    = self._fmt(self.size)
+        arrow = "📤" if self.direction == 'sent' else "📥"
+        return f"  {mark} {arrow} {self.filename}  ({sz})"
 
     @staticmethod
-    def _fmt_size(n: int) -> str:
-        if n >= 1024**3:
-            return f"{n/1024**3:.1f} GB"
+    def _fmt(n: int) -> str:
         if n >= 1024**2:
             return f"{n/1024**2:.1f} MB"
         if n >= 1024:
             return f"{n/1024:.1f} KB"
         return f"{n} B"
+
+
+# Alias para compatibilidade com código existente
+TransferRecord = TransferResult
 
 
 # ─────────────────────────────────────────────
@@ -276,30 +282,39 @@ class FileSender:
         return self._send_batch(peer, filepaths, on_progress)
 
     def _send_batch(self, peer: Peer, filepaths: List[Path],
-                    on_progress: bool) -> List[TransferRecord]:
+                    on_progress: bool) -> List[TransferResult]:
         records = []
 
-        # Validar arquivos
+        # Validar arquivos + limite total do batch
         valid = []
+        batch_total = 0
         for fp in filepaths:
             fp = Path(fp)
             if not fp.exists():
                 print(f"  ✘ Arquivo não encontrado: {fp}")
-                records.append(TransferRecord('sent', fp.name, peer.alias, 0, False))
+                records.append(TransferResult(fp.name, 0, False, peer.alias, 'sent'))
                 continue
             if not fp.is_file():
                 print(f"  ✘ Não é um arquivo: {fp}")
-                records.append(TransferRecord('sent', fp.name, peer.alias, 0, False))
+                records.append(TransferResult(fp.name, 0, False, peer.alias, 'sent'))
                 continue
 
             allowed, msg = check_file_allowed(fp)
             if not allowed:
                 print(f"  ✘ {msg}")
-                records.append(TransferRecord('sent', fp.name, peer.alias, fp.stat().st_size, False))
+                records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
                 continue
             if msg:
-                # É um aviso (não bloqueia)
                 print(f"  ⚠  {msg}")
+
+            # Checar total do lote
+            batch_total += fp.stat().st_size
+            if batch_total > MAX_BATCH_TOTAL:
+                mb_lim = MAX_BATCH_TOTAL // 1024 // 1024
+                print(f"  ✘ Lote excederia {mb_lim} MB total — {fp.name} ignorado.")
+                records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
+                batch_total -= fp.stat().st_size
+                continue
 
             valid.append(fp)
 
@@ -312,7 +327,7 @@ class FileSender:
         except Exception as e:
             print(f"  ✘ Falha ao conectar: {e}")
             for fp in valid:
-                records.append(TransferRecord('sent', fp.name, peer.alias, fp.stat().st_size, False))
+                records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
             return records
 
         try:
@@ -338,14 +353,14 @@ class FileSender:
                     'hmac_key':   hmac_key.hex(),
                     'salt':       salt.hex(),
                     'sender_id':  self.my_id,
-                    'compressed': True,   # compressão zlib obrigatória
+                    'compressed': True,
                 })
 
                 resp = recv_message(sock, timeout=15.0)
                 if resp.get('type') != 'accept':
                     reason = resp.get('reason', '?')
                     print(f"  ✘ Recusado pelo peer: {reason}")
-                    records.append(TransferRecord('sent', fp.name, peer.alias, filesize, False))
+                    records.append(TransferResult(fp.name, filesize, False, peer.alias, 'sent'))
                     continue
 
                 # Progresso
@@ -357,7 +372,7 @@ class FileSender:
                 except Exception as e:
                     if prog:
                         prog.finish(False)
-                    records.append(TransferRecord('sent', fp.name, peer.alias, filesize, False))
+                    records.append(TransferResult(fp.name, filesize, False, peer.alias, 'sent'))
                     continue
 
                 # HMAC de integridade
@@ -368,7 +383,7 @@ class FileSender:
                 success = conf.get('type') == 'ok'
                 if prog:
                     prog.finish(success)
-                records.append(TransferRecord('sent', fp.name, peer.alias, filesize, success))
+                records.append(TransferResult(fp.name, filesize, success, peer.alias, 'sent'))
 
         finally:
             try:
@@ -384,9 +399,13 @@ class FileSender:
 # ─────────────────────────────────────────────
 
 class FileReceiver:
+    """
+    Processa conexões entrantes e recebe arquivos.
+    Sem logging, sem histórico persistente — privacidade total.
+    """
 
-    def __init__(self, history_callback: Optional[Callable] = None):
-        self._history_cb = history_callback
+    def __init__(self, on_receive: Optional[Callable] = None):
+        self._on_receive = on_receive  # callback opcional apenas para notificação na tela
 
     def handle(self, sock: ssl.SSLSocket, addr):
         """Processa uma conexão entrante (chamado pela thread do servidor)"""
@@ -404,7 +423,6 @@ class FileReceiver:
                 filesize   = int(msg['size'])
                 hmac_key   = bytes.fromhex(msg['hmac_key'])
                 salt       = bytes.fromhex(msg['salt'])
-                sender_id  = msg.get('sender_id', 'unknown')
                 file_index = msg.get('file_index', 0)
                 file_count = msg.get('file_count', 1)
 
@@ -446,11 +464,9 @@ class FileReceiver:
                     send_message(sock, {'type': 'error', 'reason': str(e)})
                     save_path.unlink(missing_ok=True)
 
-                # Registrar
-                if self._history_cb:
-                    self._history_cb(TransferRecord(
-                        'received', filename, addr[0], filesize, success
-                    ))
+                # Notificar (apenas na tela, sem armazenar)
+                if self._on_receive and success:
+                    self._on_receive(filename, addr[0], filesize)
 
                 # Se há mais arquivos no batch, continuar loop
                 if file_index + 1 >= file_count:

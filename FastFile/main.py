@@ -31,6 +31,8 @@ REQUIRED = {
     'colorama':     'colorama>=0.4',
     'netifaces':    'netifaces>=0.11',
     'zeroconf':     'zeroconf>=0.60',
+    'stem':         'stem>=1.8',
+    'socks':        'PySocks>=1.7',
 }
 
 _WIDTH = 54
@@ -140,7 +142,7 @@ def main():
     from ui.menu import (
         main_menu, cls,
         screen_start, screen_peers, screen_add_peer, screen_send,
-        screen_profile, screen_formats, screen_destruct,
+        screen_profile, screen_tor, screen_formats, screen_destruct,
         err, warn, C,
     )
 
@@ -149,41 +151,27 @@ def main():
     while True:
         try:
             peer_count = node.registry.count() if node.registry else 0
-            alias = node.alias if node._started else "-"
-            choice = main_menu(node._started, peer_count, alias)
+            alias      = node.alias if node._started else "-"
+            tor_active = node.is_tor_active()
+            choice     = main_menu(node._started, peer_count, alias, tor_active)
 
-            if choice == '1':
-                screen_start(node)
-
-            elif choice == '2':
-                screen_peers(node)
-
-            elif choice == '3':
-                screen_add_peer(node)
-
-            elif choice == '4':
-                screen_send(node)
-
-            elif choice == '5':
-                screen_profile(node)
-
-            elif choice == '6':
-                screen_formats()
-
-            elif choice == '7':
-                screen_destruct(node)
-
-            elif choice == '8':
+            if   choice == '1': screen_start(node)
+            elif choice == '2': screen_peers(node)
+            elif choice == '3': screen_add_peer(node)
+            elif choice == '4': screen_send(node)
+            elif choice == '5': screen_profile(node)
+            elif choice == '6': screen_tor(node)
+            elif choice == '7': screen_formats()
+            elif choice == '8': screen_destruct(node)
+            elif choice == '9':
                 cls()
                 print(f"\n  {C['G']}Encerrando FastFile...{C['RST']}")
                 node.shutdown()
                 print(f"  {C['G']}Até logo!{C['RST']}\n")
                 break
-
             else:
                 warn("Opção inválida.")
-                import time
-                time.sleep(1)
+                import time as _t; _t.sleep(1)
 
         except KeyboardInterrupt:
             cls()
