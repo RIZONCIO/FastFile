@@ -1,56 +1,52 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ui/menu.py - Interface CLI completa do FastFile v3.3
-Tor toggle, seletor gráfico de arquivos, perfil anônimo sem histórico.
+ui/menu.py - FastFile v3.4  CLI Interface (English)
+Menu: Start+Tor | Peers | Connect | Send | Profile+Formats | Exit | Self-destruct
 """
 
-import os
-import sys
-import time
-import platform
+import os, sys, time, platform
 from pathlib import Path
 
 try:
-    from colorama import init as _cinit, Fore, Style
-    _cinit(autoreset=True)
-    C = {
-        'H':   Fore.CYAN   + Style.BRIGHT,
-        'G':   Fore.GREEN  + Style.BRIGHT,
-        'Y':   Fore.YELLOW,
-        'R':   Fore.RED    + Style.BRIGHT,
-        'B':   Fore.BLUE   + Style.BRIGHT,
-        'M':   Fore.MAGENTA,
-        'W':   Style.BRIGHT,
-        'DIM': Style.DIM,
-        'RST': Style.RESET_ALL,
-    }
+    from colorama import init as _ci, Fore, Style
+    _ci(autoreset=True)
+    C = {'H': Fore.CYAN+Style.BRIGHT, 'G': Fore.GREEN+Style.BRIGHT,
+         'Y': Fore.YELLOW, 'R': Fore.RED+Style.BRIGHT,
+         'B': Fore.BLUE+Style.BRIGHT, 'M': Fore.MAGENTA,
+         'W': Style.BRIGHT, 'DIM': Style.DIM, 'RST': Style.RESET_ALL}
 except ImportError:
     C = {k: '' for k in ('H','G','Y','R','B','M','W','DIM','RST')}
 
 
+# ── Terminal helpers ───────────────────────────────────────────────────────────
+
 def cls():
     os.system('cls' if platform.system() == 'Windows' else 'clear')
 
-def pause(msg="  Pressione Enter para continuar..."):
+def pause(msg="  Press Enter to continue..."):
     input(f"\n{C['Y']}{msg}{C['RST']}")
 
 def prompt(msg, default=""):
     suffix = f" [{default}]" if default else ""
     try:
-        val = input(f"{C['Y']}  {msg}{suffix}: {C['RST']}").strip()
+        v = input(f"{C['Y']}  {msg}{suffix}: {C['RST']}").strip()
     except (EOFError, KeyboardInterrupt):
         return default
-    return val if val else default
+    return v if v else default
 
 def confirm(msg):
-    return prompt(f"{msg} (s/N)").lower() in ('s','sim','y','yes')
+    return prompt(f"{msg} (y/N)").lower() in ('y', 'yes')
 
-def hr(char="─", width=60):
-    return C['DIM'] + char * width + C['RST']
+def hr(ch="─", w=60):   return C['DIM'] + ch * w + C['RST']
+def ok(t):    print(f"  {C['G']}✔  {t}{C['RST']}")
+def warn(t):  print(f"  {C['Y']}⚠  {t}{C['RST']}")
+def err(t):   print(f"  {C['R']}✘  {t}{C['RST']}")
+def info(t):  print(f"  {C['M']}•  {t}{C['RST']}")
+def bullet(t):print(f"       {C['DIM']}{t}{C['RST']}")
 
 def title(text):
-    pad = max(0, (58 - len(text)) // 2)
+    pad  = max(0, (58 - len(text)) // 2)
     rpad = 58 - pad - len(text)
     return (f"\n{C['H']}╔{'═'*58}╗\n"
             f"║{' '*pad}{text}{' '*rpad}║\n"
@@ -59,14 +55,10 @@ def title(text):
 def section(text):
     print(f"\n{C['B']}  ┌─ {text} {C['RST']}")
 
-def ok(text):   print(f"  {C['G']}✔  {text}{C['RST']}")
-def warn(text): print(f"  {C['Y']}⚠  {text}{C['RST']}")
-def err(text):  print(f"  {C['R']}✘  {text}{C['RST']}")
-def info(text): print(f"  {C['M']}•  {text}{C['RST']}")
-def bullet(text): print(f"       {C['DIM']}{text}{C['RST']}")
 
+# ── Banner ────────────────────────────────────────────────────────────────────
 
-VERSION = "3.3"
+VERSION = "3.4"
 BANNER = r"""
   ███████╗ █████╗ ███████╗████████╗███████╗██╗██╗     ███████╗
   ██╔════╝██╔══██╗██╔════╝╚══██╔══╝██╔════╝██║██║     ██╔════╝
@@ -79,12 +71,23 @@ BANNER = r"""
 def show_banner(tor_active=False):
     cls()
     print(C['H'] + BANNER + C['RST'])
-    print(f"  {C['DIM']}FastFile v{VERSION}  •  TLS 1.3 + AES-256-GCM + zlib  •  P2P Seguro{C['RST']}")
+    print(f"  {C['DIM']}FastFile v{VERSION}  •  TLS 1.3 + AES-256-GCM + zlib  •  Secure P2P{C['RST']}")
     if tor_active:
-        print(f"  {C['G']}● TOR ATIVO{C['RST']}  {C['DIM']}— IP real oculto via onion routing{C['RST']}")
+        print(f"  {C['G']}● TOR ACTIVE{C['RST']}  {C['DIM']}— real IP hidden via onion routing{C['RST']}")
     else:
-        print(f"  {C['Y']}○ Tor inativo{C['RST']}  {C['DIM']}— IP real + TLS 1.3{C['RST']}")
+        print(f"  {C['DIM']}○ Tor off  — real IP + TLS 1.3{C['RST']}")
     print()
+
+
+# ── Main menu ─────────────────────────────────────────────────────────────────
+#
+#   [1] Start node (+ optional Tor)
+#   [2] View peers
+#   [3] Connect to peer (by Node ID)
+#   [4] Send file(s)
+#   [5] Profile / Settings
+#   [6] Exit
+#   [7] Self-destruct
 
 def main_menu(node_started, peer_count, alias, tor_active=False):
     show_banner(tor_active)
@@ -94,127 +97,176 @@ def main_menu(node_started, peer_count, alias, tor_active=False):
     )
     print(f"  Status: {status}\n")
     print(hr())
-    print(f"  {C['B']}[1]{C['RST']}  🚀  Iniciar nó P2P")
-    print(f"  {C['B']}[2]{C['RST']}  👥  Ver peers na rede")
-    print(f"  {C['B']}[3]{C['RST']}  🔗  Adicionar peer por IP")
-    print(f"  {C['B']}[4]{C['RST']}  📤  Enviar arquivo(s)")
-    print(f"  {C['B']}[5]{C['RST']}  🪪  Perfil anônimo")
-    if tor_active:
-        print(f"  {C['G']}[6]{C['RST']}  🧅  Desativar Tor  {C['DIM']}(ATIVO){C['RST']}")
-    else:
-        print(f"  {C['M']}[6]{C['RST']}  🧅  Ativar Tor  {C['DIM']}(anonimato extra){C['RST']}")
-    print(f"  {C['Y']}[7]{C['RST']}  📂  Formatos suportados / bloqueados")
-    print(f"  {C['R']}[8]{C['RST']}  💣  AUTO-DESTRUIÇÃO")
-    print(f"  {C['DIM']}[9]{C['RST']}  🚪  Sair")
+    print(f"  {C['B']}[1]{C['RST']}  🚀  Start P2P node")
+    print(f"  {C['B']}[2]{C['RST']}  👥  View peers online")
+    print(f"  {C['B']}[3]{C['RST']}  🔗  Connect to peer  {C['DIM']}(by Node ID){C['RST']}")
+    print(f"  {C['B']}[4]{C['RST']}  📤  Send file(s)")
+    print(f"  {C['B']}[5]{C['RST']}  ⚙️   Profile / Settings")
+    print(f"  {C['DIM']}[6]{C['RST']}  🚪  Exit")
+    print(f"  {C['R']}[7]{C['RST']}  💣  Self-destruct")
     print(hr())
-    return prompt("Opção")
+    return prompt("Option")
 
 
-# ── [1] Iniciar nó ────────────────────────────
+# ── [1] Start node + optional Tor ─────────────────────────────────────────────
 
 def screen_start(node):
     cls()
-    print(title("INICIAR NÓ P2P"))
-    print("  Iniciando serviços...\n")
-    result = node.start()
-    if result['status'] == 'already_running':
-        warn("Nó já está em execução.")
+    print(title("START P2P NODE"))
+
+    if node._started:
+        warn("Node is already running.")
         pause(); return True
+
+    # ── Ask about Tor before starting ──
+    section("🧅  Tor — Extra Anonymity")
+    print(f"  {C['DIM']}Tor routes traffic through 3 relay nodes (onion routing).{C['RST']}")
+    print(f"  {C['DIM']}Peers see only the Tor exit node IP — never your real IP.{C['RST']}")
+    print()
+    warn("Tor adds latency (~100–500 ms per hop).")
+    warn("Upload speed will be lower than without Tor.")
+    print()
+
+    enable_tor = confirm("Enable Tor with this node? (recommended for privacy)")
+    print()
+
+    print(f"  {C['M']}Starting services...{C['RST']}\n")
+
+    def _tor_progress(msg):
+        print(f"  {C['M']}→  {msg}{C['RST']}")
+
+    if enable_tor:
+        # Pass progress only if Tor is being enabled
+        result = node.start(enable_tor=False)  # start network first
+        if result['status'] == 'ok':
+            print(f"  {C['M']}→  Connecting to Tor network...{C['RST']}")
+            tor_result = node.start_tor(progress_cb=_tor_progress)
+            result['tor_result'] = tor_result
+    else:
+        result = node.start(enable_tor=False)
+
     if result['status'] == 'error':
-        err(result['msg'])
-        pause(); return False
-    ok("Nó iniciado!")
+        err(result['msg']); pause(); return False
+
     print()
-    section("Identidade anônima")
-    info(f"Node ID   : {C['W']}{result['node_id']}{C['RST']}")
-    info(f"Alias     : {C['W']}{result['alias']}{C['RST']}")
-    info(f"Fingerprt : {C['W']}{result['fingerprint']}{C['RST']}")
-    section("Rede")
-    info(f"IPs       : {', '.join(result['ips'])}")
-    info(f"Porta     : {result['port']}")
-    info(f"Descoberta: {result['disc_mode']}")
-    info(f"Downloads : {result['downloads']}")
+    ok("Node started!")
     print()
-    info("Descoberta automática ativa. Aguardando peers...")
+    section("🪪  Anonymous identity")
+    info(f"Node ID     : {C['W']}{result['node_id']}{C['RST']}")
+    info(f"Alias       : {C['W']}{result['alias']}{C['RST']}")
+    info(f"Fingerprint : {C['W']}{result['fingerprint']}{C['RST']}")
+    section("🌐  Network")
+    info(f"Port        : {result['port']}")
+    info(f"Discovery   : {result['disc_mode']}")
+    info(f"Downloads   : {result['downloads']}")
+
+    tor_r = result.get('tor_result')
+    if enable_tor:
+        print()
+        if tor_r and tor_r.get('ok'):
+            ok(f"Tor active!  {tor_r['msg']}")
+        else:
+            msg = tor_r['msg'] if tor_r else "unknown error"
+            warn(f"Tor failed: {msg}")
+            warn("Running without Tor. You can retry via [5] Profile > Tor.")
+    else:
+        print()
+        info("Tor is OFF. You can enable it later via [5] Profile > Tor.")
+
+    print()
+    info("Auto-discovery active. Waiting for peers...")
     pause(); return True
 
 
-# ── [2] Peers ─────────────────────────────────
+# ── [2] View peers ─────────────────────────────────────────────────────────────
 
 def screen_peers(node):
     cls()
-    print(title("PEERS NA REDE"))
+    print(title("PEERS ONLINE"))
     if not node._started:
-        warn("Nó não iniciado. Use [1] primeiro.")
-        pause(); return
+        warn("Node not started. Use [1] first."); pause(); return
     peers = node.list_peers()
     node.registry.prune()
     if not peers:
-        warn("Nenhum peer encontrado ainda.")
-        info("Na mesma rede: aguarde a descoberta automática.")
-        info("Em redes diferentes: use [3] para adicionar por IP.")
+        warn("No peers found yet.")
+        info("Same network: wait for auto-discovery.")
+        info("Different network: use [3] to connect by Node ID.")
         pause(); return
     print(f"  {C['G']}{len(peers)} peer(s) online:{C['RST']}\n")
-    print(f"  {'#':<3}  {'ALIAS':<22}  {'IP':<16}  {'NODE ID':<14}  {'VISTO HÁ'}")
+    print(f"  {'#':<3}  {'ALIAS':<22}  {'NODE ID':<16}  {'LAST SEEN'}")
     print(hr())
     for i, p in enumerate(peers, 1):
         elapsed = int(time.time() - p.last_seen)
-        print(f"  {C['B']}{i:<3}{C['RST']}  {C['W']}{p.alias:<22}{C['RST']}  "
-              f"{p.ip:<16}  {C['DIM']}{p.node_id:<14}{C['RST']}  {elapsed}s atrás")
+        print(f"  {C['B']}{i:<3}{C['RST']}  "
+              f"{C['W']}{p.alias:<22}{C['RST']}  "
+              f"{C['DIM']}{p.node_id:<16}{C['RST']}  "
+              f"{elapsed}s ago")
+    print()
+    info("IP addresses are never displayed — Node ID is used for all connections.")
     pause()
 
 
-# ── [3] Adicionar peer por IP ─────────────────
+# ── [3] Connect by Node ID ─────────────────────────────────────────────────────
 
 def screen_add_peer(node):
     cls()
-    print(title("ADICIONAR PEER POR IP"))
+    print(title("CONNECT TO PEER"))
     if not node._started:
-        warn("Nó não iniciado. Use [1] primeiro.")
-        pause(); return
-    section("Conexão manual entre redes")
-    print(f"  {C['DIM']}Para funcionar entre redes diferentes:{C['RST']}")
-    bullet("VPN (Tailscale, ZeroTier, WireGuard) — mais simples")
-    bullet("Tor ativo nos dois lados — use [6]")
-    bullet("Port forward na porta 55771 TCP do roteador")
+        warn("Node not started. Use [1] first."); pause(); return
+
+    section("Why Node ID instead of IP?")
+    print(f"  {C['DIM']}Using Node IDs keeps IP addresses hidden from both sides.{C['RST']}")
+    print(f"  {C['DIM']}Exposed IPs can lead to DDoS or targeted attacks.{C['RST']}")
+    print(f"  {C['DIM']}FastFile never shows or logs real IPs in the interface.{C['RST']}")
     print()
-    ip = prompt("IP do peer").strip()
-    if not ip:
-        warn("Cancelado."); pause(); return
+    section("Cross-network options")
+    bullet("VPN (Tailscale, ZeroTier, WireGuard) — easiest, hides IPs")
+    bullet("Tor active on both sides — use [1] to enable")
+    bullet("Port forward TCP 55771 on router — uses real IP (less private)")
+    print()
+
+    info("For same-network peers: just use [2] — auto-discovery handles it.")
+    print()
+    node_id_input = prompt("Enter peer Node ID (or IP if using VPN/port-forward)").strip()
+    if not node_id_input:
+        warn("Cancelled."); pause(); return
+
     from core.network import SERVICE_PORT
     try:
-        port = int(prompt("Porta", str(SERVICE_PORT)))
+        port = int(prompt("Port", str(SERVICE_PORT)))
     except ValueError:
-        err("Porta inválida."); pause(); return
-    if node.add_peer_manual(ip, port):
-        ok(f"Peer adicionado: {ip}:{port}")
-        info("Heartbeat confirmará status em até 20s. Veja em [2].")
+        err("Invalid port."); pause(); return
+
+    if node.add_peer_by_node_id(node_id_input, port):
+        ok(f"Peer added: {node_id_input}")
+        info("Heartbeat will confirm status within 20s. Check [2].")
     else:
-        err("Falha. Nó iniciado?")
+        err("Failed. Is the node started?")
     pause()
 
 
-# ── [4] Enviar arquivo(s) ─────────────────────
+# ── [4] Send file(s) ──────────────────────────────────────────────────────────
 
 def screen_send(node):
     cls()
-    print(title("ENVIAR ARQUIVO(S)"))
+    print(title("SEND FILE(S)"))
     if not node._started:
-        warn("Nó não iniciado. Use [1] primeiro.")
-        pause(); return
+        warn("Node not started. Use [1] first."); pause(); return
     peers = node.list_peers()
     if not peers:
-        warn("Nenhum peer disponível.")
-        info("Use [2] para ver peers ou [3] para adicionar por IP.")
+        warn("No peers available.")
+        info("Use [2] to see peers or [3] to connect by Node ID.")
         pause(); return
 
-    section("Selecionar destinatário")
-    print(f"  {'#':<3}  {'ALIAS':<22}  {'IP'}")
+    section("Select recipient")
+    print(f"  {'#':<3}  {'ALIAS':<22}  {'NODE ID'}")
     print(hr())
     for i, p in enumerate(peers, 1):
-        print(f"  {C['B']}{i:<3}{C['RST']}  {C['W']}{p.alias:<22}{C['RST']}  {p.ip}")
+        print(f"  {C['B']}{i:<3}{C['RST']}  {C['W']}{p.alias:<22}{C['RST']}  {C['DIM']}{p.node_id}{C['RST']}")
     print()
-    peer_choice = prompt("Número do peer (ou alias)")
+    info("IP addresses are hidden — connections use Node ID only.")
+    print()
+    peer_choice = prompt("Peer number (or alias / Node ID)")
     peer = None
     if peer_choice.isdigit():
         idx = int(peer_choice) - 1
@@ -223,184 +275,180 @@ def screen_send(node):
     else:
         peer = node._resolve_peer(peer_choice)
     if not peer:
-        err("Peer inválido."); pause(); return
+        err("Invalid peer."); pause(); return
 
-    ok(f"Destinatário: {peer.alias} ({peer.ip})")
+    ok(f"Recipient: {peer.alias}  [ID: {peer.node_id}]")
     print()
 
-    section("Modo de envio")
+    section("Send mode")
     from ui.file_picker import gui_mode_label
-    info(f"Seletor ativo: {gui_mode_label()}")
+    info(f"File selector: {gui_mode_label()}")
     print()
-    print(f"  {C['B']}[1]{C['RST']}  Enviar 1 arquivo          (máx 20 MB)")
-    print(f"  {C['B']}[2]{C['RST']}  Enviar vários arquivos     (máx 200 MB total)")
+    print(f"  {C['B']}[1]{C['RST']}  Send 1 file            (max 20 MB)")
+    print(f"  {C['B']}[2]{C['RST']}  Send multiple files     (max 200 MB total)")
     print()
-    mode = prompt("Modo", "1")
-    if mode == "1":
-        _send_single(node, peer)
-    elif mode == "2":
-        _send_batch(node, peer)
-    else:
-        err("Opção inválida."); pause()
+    mode = prompt("Mode", "1")
+    if mode == "1":   _send_single(node, peer)
+    elif mode == "2": _send_batch(node, peer)
+    else: err("Invalid option."); pause()
 
 
 def _send_single(node, peer):
-    section("Selecionar 1 arquivo")
+    section("Select 1 file")
     from ui.file_picker import pick_file, gui_mode_label
     from core.transfer import check_file_allowed, MAX_SINGLE_FILE
-    info(f"Abrindo seletor ({gui_mode_label()})...")
+    info(f"Opening selector ({gui_mode_label()})...")
     print()
     filepath = pick_file()
     if not filepath:
-        warn("Nenhum arquivo selecionado."); pause(); return
+        warn("No file selected."); pause(); return
     p = Path(filepath)
     if not p.exists():
-        err(f"Não encontrado: {filepath}"); pause(); return
+        err(f"File not found: {filepath}"); pause(); return
     allowed, msg = check_file_allowed(p)
     if not allowed:
         err(msg); pause(); return
     if msg:
         print(); warn(msg)
-        if not confirm("Continuar?"):
-            warn("Cancelado."); pause(); return
+        if not confirm("Continue anyway?"): warn("Cancelled."); pause(); return
     size_mb = p.stat().st_size / 1024 / 1024
     print()
-    info(f"Arquivo   : {C['W']}{p.name}{C['RST']}")
-    info(f"Tamanho   : {size_mb:.2f} MB  (máx {MAX_SINGLE_FILE//1024//1024} MB)")
-    info(f"Compressão: zlib nível 6 (automática)")
+    info(f"File       : {C['W']}{p.name}{C['RST']}")
+    info(f"Size       : {size_mb:.2f} MB  (max {MAX_SINGLE_FILE//1024//1024} MB)")
+    info(f"Compression: zlib level 6 (automatic)")
     if node.is_tor_active():
-        info(f"Roteamento: {C['G']}via Tor — IP oculto{C['RST']}")
+        info(f"Routing    : {C['G']}via Tor — real IP hidden{C['RST']}")
     print()
-    if not confirm("Confirmar envio?"):
-        warn("Cancelado."); pause(); return
+    if not confirm("Confirm send?"): warn("Cancelled."); pause(); return
     print()
     success = node.send_file(peer.node_id, filepath)
     print()
-    ok("Concluído — integridade HMAC verificada ✔") if success else err("Falha na transferência.")
+    ok("Done — HMAC integrity verified ✔") if success else err("Transfer failed.")
     pause()
 
 
 def _send_batch(node, peer):
-    section("Selecionar vários arquivos")
+    section("Select multiple files")
     from ui.file_picker import pick_files, gui_mode_label
     from core.transfer import check_file_allowed, MAX_SINGLE_FILE, MAX_BATCH_TOTAL
-    info(f"Abrindo seletor ({gui_mode_label()})...")
-    if "janela" in gui_mode_label():
-        info("Ctrl+clique seleciona vários arquivos de uma vez.")
+    info(f"Opening selector ({gui_mode_label()})...")
+    if "graphic" in gui_mode_label() or "native" in gui_mode_label():
+        info("Ctrl+click to select multiple files at once.")
     else:
-        info("Navegue e selecione. Enter vazio confirma.")
+        info("Navigate and select files. Empty Enter confirms.")
     print()
     raw_paths = pick_files()
     if not raw_paths:
-        warn("Nenhum arquivo selecionado."); pause(); return
-
+        warn("No files selected."); pause(); return
     filepaths = []
     batch_bytes = 0
     print()
     for raw in raw_paths:
         p = Path(raw)
         if not p.exists() or not p.is_file():
-            warn(f"Ignorado: {Path(raw).name}"); continue
+            warn(f"Skipped (not found): {Path(raw).name}"); continue
         allowed, msg = check_file_allowed(p)
         if not allowed:
-            err(f"{p.name} — bloqueado"); continue
+            err(f"{p.name} — blocked"); continue
         if msg:
             warn(f"{p.name} — {msg}")
         sz = p.stat().st_size
         if batch_bytes + sz > MAX_BATCH_TOTAL:
-            warn(f"{p.name} ignorado — lote atingiria {MAX_BATCH_TOTAL//1024//1024} MB."); continue
+            warn(f"{p.name} skipped — batch would exceed {MAX_BATCH_TOTAL//1024//1024} MB."); continue
         batch_bytes += sz
         filepaths.append(raw)
         ok(f"  {p.name}  ({sz/1024:.1f} KB)")
-
     if not filepaths:
-        warn("Nenhum arquivo válido."); pause(); return
-
+        warn("No valid files."); pause(); return
     print()
-    info(f"Total: {len(filepaths)} arquivo(s)  —  {batch_bytes/1024/1024:.1f} / {MAX_BATCH_TOTAL//1024//1024} MB")
+    info(f"Total: {len(filepaths)} file(s)  —  "
+         f"{batch_bytes/1024/1024:.1f} / {MAX_BATCH_TOTAL//1024//1024} MB")
     if node.is_tor_active():
-        info(f"Roteamento: {C['G']}via Tor — IP oculto{C['RST']}")
+        info(f"Routing: {C['G']}via Tor — IP hidden{C['RST']}")
     print()
-    if not confirm("Confirmar envio?"):
-        warn("Cancelado."); pause(); return
+    if not confirm("Confirm send?"): warn("Cancelled."); pause(); return
     print()
     records = node.send_files(peer.node_id, filepaths)
     print()
     ok_n  = sum(1 for r in records if r.success)
     err_n = len(records) - ok_n
     print(hr())
-    info(f"Resultado: {C['G']}{ok_n} OK{C['RST']}  |  {C['R']}{err_n} falhas{C['RST']}")
+    info(f"Result: {C['G']}{ok_n} OK{C['RST']}  |  {C['R']}{err_n} failed{C['RST']}")
     for r in records:
         mark = f"{C['G']}✔{C['RST']}" if r.success else f"{C['R']}✘{C['RST']}"
         print(f"  {mark}  {r.filename}")
     pause()
 
 
-# ── [5] Perfil anônimo ────────────────────────
+# ── [5] Profile / Settings ────────────────────────────────────────────────────
 
 def screen_profile(node):
     cls()
-    print(title("PERFIL ANONIMO"))
+    print(title("PROFILE / SETTINGS"))
     si = node.system_info()
-    section("🪪  Identidade")
+
+    # ── Identity ──
+    section("🪪  Anonymous identity")
     info(f"Node ID     : {C['W']}{si['node_id']}{C['RST']}")
     info(f"Alias       : {C['W']}{si['alias']}{C['RST']}")
-    info(f"Fingerprint : {C['W']}{si['fingerprint'] or '(inicie o nó)'}{C['RST']}")
-    print(f"\n  {C['DIM']}ID e alias são entropia pura — sem relação com nome, hostname ou MAC.{C['RST']}")
-    section("🌐  Rede & segurança")
+    info(f"Fingerprint : {C['W']}{si['fingerprint'] or '(start node first)'}{C['RST']}")
+    print(f"\n  {C['DIM']}ID and alias are pure random — no link to name, hostname or MAC.{C['RST']}")
+
+    # ── Network & Security ──
+    section("🌐  Network & security")
     status_s = f"{C['G']}ONLINE{C['RST']}" if si['running'] else f"{C['Y']}OFFLINE{C['RST']}"
     info(f"Status      : {status_s}")
-    info(f"IPs locais  : {', '.join(si['ips'])}")
-    info(f"Porta TCP   : {si['port']}")
+    info(f"Port        : {si['port']}")
     info(f"TLS         : 1.3  |  AES-256-GCM + ChaCha20")
-    info(f"Integridade : HMAC-SHA256 por arquivo")
-    info(f"Compressão  : zlib nível 6 (automática)")
-    tor_s = (f"{C['G']}ATIVO — onion routing{C['RST']}"
-             if si.get('tor_active') else f"{C['Y']}Inativo — use [6]{C['RST']}")
+    info(f"Integrity   : HMAC-SHA256 per file")
+    info(f"Compression : zlib level 6 (automatic)")
+    info(f"IP exposure : {C['G']}hidden — Node ID used for all connections{C['RST']}")
+    tor_s = (f"{C['G']}ACTIVE — onion routing{C['RST']}"
+             if si.get('tor_active') else f"{C['Y']}Inactive{C['RST']}")
     info(f"Tor         : {tor_s}")
-    section("📁  Armazenamento")
+    info(f"Crypto lib  : {'✔ cryptography' if si['crypto'] else '✘ missing'}")
+
+    # ── Tor toggle ──
+    print()
+    if si.get('tor_active'):
+        if confirm("  Tor is ACTIVE. Deactivate?"):
+            node.stop_tor()
+            ok("Tor deactivated.")
+    else:
+        if confirm("  Activate Tor now? (adds latency, hides IP)"):
+            _activate_tor_inline(node)
+
+    # ── Storage ──
+    section("📁  Storage")
     info(f"Downloads   : {si['downloads']}")
     info(f"Work dir    : {si['work_dir']}")
-    info(f"Plataforma  : {si['platform']}")
-    section("🔒  Privacidade")
-    print(f"  {C['G']}  Histórico de transferências : DESATIVADO{C['RST']}")
-    print(f"  {C['G']}  Logging em disco            : NENHUM{C['RST']}")
-    print(f"  {C['DIM']}  Nada do que você envia ou recebe é registrado.{C['RST']}")
+    info(f"Platform    : {si['platform']}")
+
+    # ── Privacy ──
+    section("🔒  Privacy")
+    print(f"  {C['G']}  Transfer history  : DISABLED{C['RST']}")
+    print(f"  {C['G']}  Disk logging      : NONE{C['RST']}")
+    print(f"  {C['DIM']}  Nothing you send or receive is ever stored.{C['RST']}")
+
+    # ── Supported / Blocked formats ──
+    section("📂  File formats")
+    from core.transfer import MAX_SINGLE_FILE, MAX_BATCH_TOTAL
+    print(f"  {C['G']}Supported:{C['RST']}  images, documents, code, data, archives, audio, fonts, executables")
+    print(f"  {C['R']}Blocked  :{C['RST']}  video (.mp4 .mkv ...), Photoshop .psd, Illustrator .ai,")
+    print(f"            Premiere .prproj, After Effects .aep, RAW photos,")
+    print(f"            disk images (.iso .vmdk), DAW projects, SQL dumps")
+    print()
+    info(f"Per-file limit : {C['W']}{MAX_SINGLE_FILE // 1024 // 1024} MB{C['RST']}")
+    info(f"Batch limit    : {C['W']}{MAX_BATCH_TOTAL // 1024 // 1024} MB total{C['RST']}")
+    warn("To send blocked formats: compress into .zip first.")
+
     pause()
 
 
-# ── [6] Tor toggle ────────────────────────────
-
-def screen_tor(node):
-    cls()
-    print(title("TOR — ANONIMATO EXTRA"))
-    if node.is_tor_active():
-        section("● Tor está ATIVO")
-        info("Tráfego roteado via onion routing — IP real oculto.")
-        print()
-        if confirm("Desativar Tor?"):
-            node.stop_tor()
-            ok("Tor desativado. Usando IP real + TLS 1.3.")
-        else:
-            warn("Cancelado — Tor continua ativo.")
-        pause(); return
-
-    section("O que o Tor faz")
-    print(f"  {C['DIM']}Roteia o tráfego por 3 nós intermediários (onion routing).{C['RST']}")
-    print(f"  {C['DIM']}O peer vê apenas o IP do nó de saída Tor, nunca o seu IP real.{C['RST']}")
-    print(f"  {C['DIM']}FastFile ainda usa TLS 1.3 sobre o Tor — segurança dupla.{C['RST']}")
+def _activate_tor_inline(node):
+    """Activates Tor with inline progress — used inside Profile screen."""
     print()
-    section("⚠  Desempenho")
-    warn("Tor adiciona latência (~100–500 ms por hop).")
-    warn("Velocidade de upload será reduzida.")
-    print()
-    section("Processo de ativação")
-    info("1. Verifica stem e PySocks (já instalados pelo FastFile)")
-    info("2. Localiza Tor no sistema ou baixa o Expert Bundle (~5 MB)")
-    info("3. Aguarda bootstrap na rede Tor (até 60 s)")
-    print()
-    if not confirm("Ativar Tor agora?"):
-        warn("Cancelado."); pause(); return
+    warn("Tor adds ~100–500 ms latency per hop and reduces upload speed.")
     print()
 
     def _progress(msg):
@@ -409,79 +457,38 @@ def screen_tor(node):
     result = node.start_tor(progress_cb=_progress)
     print()
     if result['ok']:
-        ok(f"Tor ativo!  {result['msg']}")
-        info("Todas as conexões agora passam pelo onion routing.")
+        ok(f"Tor active!  {result['msg']}")
     else:
-        err(f"Falha: {result['msg']}")
-        print()
-        warn("Instale o Tor manualmente:")
+        err(f"Tor failed: {result['msg']}")
+        warn("Install Tor manually:")
         bullet("Windows : https://www.torproject.org/download/tor/")
         bullet("Linux   : sudo apt install tor")
         bullet("macOS   : brew install tor")
-        warn("Com Tor no sistema o FastFile o detecta automaticamente.")
-    pause()
 
 
-# ── [7] Formatos ──────────────────────────────
-
-def screen_formats():
-    cls()
-    print(title("FORMATOS DE ARQUIVO"))
-    from core.transfer import MAX_SINGLE_FILE, MAX_BATCH_TOTAL
-    section("✔  Suportados (exemplos)")
-    for cat, exts in [
-        ("Imagens",     ".jpg .jpeg .png .gif .webp .bmp .svg .tiff"),
-        ("Documentos",  ".pdf .docx .xlsx .pptx .odt .txt .rtf .epub"),
-        ("Código",      ".py .js .ts .html .css .c .cpp .rs .go .sh"),
-        ("Dados",       ".json .xml .csv .yaml .toml .env .ini"),
-        ("Compactados", ".zip .tar.gz .7z .rar .bz2"),
-        ("Áudio",       ".mp3 .wav .flac .ogg .aac .m4a"),
-        ("Executáveis", ".exe .msi .deb .apk .jar"),
-    ]:
-        print(f"  {C['G']}  {cat:<14}{C['RST']}  {C['DIM']}{exts}{C['RST']}")
-    print()
-    section("✘  Bloqueados")
-    for cat, exts in [
-        ("Vídeo",          ".mp4 .mkv .avi .mov .wmv .flv .webm .m4v .mpg .3gp"),
-        ("Projetos DAW",   ".aup .aup3 .ptx .als .flp"),
-        ("Adobe",          ".psd .ai .indd .xd .aep .prproj"),
-        ("Affinity",       ".afdesign .afphoto"),
-        ("RAW foto",       ".nef .cr2 .cr3 .arw .raf .dng"),
-        ("Disco/VM",       ".iso .img .vmdk .vhd .vhdx .ova"),
-        ("Dumps",          ".bak .dump .sql"),
-    ]:
-        print(f"  {C['R']}  {cat:<16}{C['RST']}  {C['DIM']}{exts}{C['RST']}")
-    print()
-    section("ℹ  Limites")
-    info(f"Por arquivo : {C['W']}{MAX_SINGLE_FILE // 1024 // 1024} MB{C['RST']}")
-    info(f"Por lote    : {C['W']}{MAX_BATCH_TOTAL // 1024 // 1024} MB total{C['RST']}")
-    info(f"Compressão  : {C['W']}zlib nível 6 — automática{C['RST']}")
-    warn("Para arquivos bloqueados, compacte em .zip antes de enviar.")
-    pause()
-
-
-# ── [8] Auto-destruição ───────────────────────
+# ── [7] Self-destruct ─────────────────────────────────────────────────────────
 
 def screen_destruct(node):
     cls()
     print(f"\n{C['R']}{'█'*60}{C['RST']}")
-    print(f"{C['R']}  ⚠   AUTO-DESTRUIÇÃO  —  FastFile   ⚠{C['RST']}")
+    print(f"{C['R']}  ⚠   SELF-DESTRUCT  —  FastFile   ⚠{C['RST']}")
     print(f"{C['R']}{'█'*60}{C['RST']}\n")
-    print(f"  Esta ação é {C['R']}IRREVERSÍVEL{C['RST']} e irá:\n")
-    bullet("Parar Tor se ativo")
-    bullet("Remover downloads (~/.fastfile/downloads)")
-    bullet("Apagar certificados e configuração (~/.fastfile)")
-    bullet("Deletar a pasta do programa")
+    print(f"  This action is {C['R']}IRREVERSIBLE{C['RST']} and will:\n")
+    bullet("Stop Tor if active")
+    bullet("Uninstall all Python packages installed by FastFile")
+    bullet("Remove all downloaded files (~/.fastfile/downloads)")
+    bullet("Delete certificates and config (~/.fastfile)")
+    bullet("Delete the program folder permanently")
     print()
-    warn("Seus arquivos pessoais NÃO são afetados.")
+    warn("Your personal files are NOT affected.")
     print()
-    if prompt(f"  {C['R']}Digite DESTRUIR{C['RST']}") != "DESTRUIR":
-        ok("Cancelado."); pause(); return
-    if prompt(f"  {C['R']}Certeza? Digite SIM{C['RST']}") != "SIM":
-        ok("Cancelado."); pause(); return
-    print(f"\n  {C['R']}Executando...{C['RST']}")
+    if prompt(f"  {C['R']}Type DESTROY to confirm{C['RST']}") != "DESTROY":
+        ok("Cancelled."); pause(); return
+    if prompt(f"  {C['R']}Are you sure? Type YES{C['RST']}") != "YES":
+        ok("Cancelled."); pause(); return
+    print(f"\n  {C['R']}Running self-destruct...{C['RST']}")
     time.sleep(0.5)
     node.self_destruct()
-    print(f"\n  {C['R']}Concluído. Encerrando.{C['RST']}")
+    print(f"\n  {C['R']}Done. Exiting.{C['RST']}")
     time.sleep(2)
     sys.exit(0)

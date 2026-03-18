@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-main.py - FastFile  •  Transferência Segura de Arquivos P2P
-Instala dependências ANTES de qualquer import interno ou CLI.
+main.py - FastFile v3.4
+Installs dependencies BEFORE any internal import or CLI starts.
+Linux fix: tries --break-system-packages when needed (PEP 668).
 """
 
 import sys
@@ -11,20 +12,11 @@ import subprocess
 import platform
 
 APP_NAME    = "FastFile"
-APP_VERSION = "3.1"
-
-# ─────────────────────────────────────────────
-#  Verificação de Python
-# ─────────────────────────────────────────────
+APP_VERSION = "3.4"
 
 if sys.version_info < (3, 8):
-    print(f"[{APP_NAME}] ERRO: Python 3.8+ necessário. Versão atual: {sys.version}")
+    print(f"[{APP_NAME}] ERROR: Python 3.8+ required. Current: {sys.version}")
     sys.exit(1)
-
-# ─────────────────────────────────────────────
-#  Dependências — instaladas ANTES de qualquer
-#  import interno ou início da CLI
-# ─────────────────────────────────────────────
 
 REQUIRED = {
     'cryptography': 'cryptography>=41.0',
@@ -35,114 +27,105 @@ REQUIRED = {
     'socks':        'PySocks>=1.7',
 }
 
-_WIDTH = 54
+_W = 54
 
-
-def _box(lines: list, color_code: str = "\033[96m", rst: str = "\033[0m"):
-    """Imprime caixa simples ANSI (funciona em CMD Win10+, Linux e Mac)."""
-    print(color_code + "╔" + "═" * _WIDTH + "╗" + rst)
+def _box(lines, color="\033[96m", rst="\033[0m"):
+    print(color + "╔" + "═" * _W + "╗" + rst)
     for line in lines:
-        pad = _WIDTH - len(line)
-        print(color_code + "║ " + rst + line + " " * (pad - 1) + color_code + "║" + rst)
-    print(color_code + "╚" + "═" * _WIDTH + "╝" + rst)
+        pad = _W - len(line)
+        print(color + "║ " + rst + line + " " * max(0, pad - 1) + color + "║" + rst)
+    print(color + "╚" + "═" * _W + "╝" + rst)
 
-
-def _try_import(module: str) -> bool:
+def _try_import(module):
     try:
         __import__(module)
         return True
     except ImportError:
         return False
 
+def _pip_install(package):
+    """
+    Tries to install a package.
+    Order: normal → --user → --break-system-packages (Linux PEP 668 fix).
+    """
+    base_cmd = [sys.executable, "-m", "pip", "install", package,
+                "--disable-pip-version-check"]
 
-def _pip_install(package: str) -> bool:
-    """Tenta instalar via pip. Retorna True se bem-sucedido."""
-    # Tentativa 1 — padrão
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", package,
-         "--disable-pip-version-check"],
-        capture_output=False,   # mostra output do pip em tempo real
-    )
-    if result.returncode == 0:
+    # Attempt 1: normal
+    r = subprocess.run(base_cmd, capture_output=False)
+    if r.returncode == 0:
         return True
 
-    # Tentativa 2 — --user (ambientes sem permissão de sistema)
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", package,
-         "--user", "--disable-pip-version-check"],
-        capture_output=False,
-    )
-    return result.returncode == 0
+    # Attempt 2: --user
+    r = subprocess.run(base_cmd + ["--user"], capture_output=False)
+    if r.returncode == 0:
+        return True
 
+    # Attempt 3: --break-system-packages (Debian/Ubuntu with PEP 668)
+    r = subprocess.run(base_cmd + ["--break-system-packages"], capture_output=False)
+    if r.returncode == 0:
+        return True
+
+    # Attempt 4: --user + --break-system-packages
+    r = subprocess.run(base_cmd + ["--user", "--break-system-packages"],
+                       capture_output=False)
+    return r.returncode == 0
 
 def ensure_dependencies():
-    """
-    Verifica e instala todas as dependências necessárias.
-    Roda ANTES de qualquer import dos módulos do FastFile.
-    Mostra progresso e resultado claramente no terminal.
-    """
     missing = {mod: pkg for mod, pkg in REQUIRED.items() if not _try_import(mod)}
-
     if not missing:
-        # Todas presentes — exibir confirmação rápida e seguir
-        print(f"\033[92m[{APP_NAME}] Dependências OK — iniciando...\033[0m\n")
+        print(f"\033[92m[{APP_NAME}] All dependencies OK — starting...\033[0m\n")
         return
 
     os.system('cls' if platform.system() == 'Windows' else 'clear')
     _box([
-        f"{APP_NAME} v{APP_VERSION}  —  Instalando dependências",
+        f"{APP_NAME} v{APP_VERSION}  —  Installing dependencies",
         "",
-        "Isso ocorre apenas na PRIMEIRA execução.",
-        "As próximas inicializações serão instantâneas.",
+        "This only runs on the FIRST launch.",
+        "Next startups will be instant.",
         "",
-        f"Plataforma: {platform.system()} {platform.release()}",
-        f"Python    : {sys.version.split()[0]}",
+        f"Platform : {platform.system()} {platform.release()}",
+        f"Python   : {sys.version.split()[0]}",
     ])
     print()
 
     failed = []
     for i, (module, package) in enumerate(missing.items(), 1):
-        print(f"  [{i}/{len(missing)}]  Instalando  \033[93m{package}\033[0m ...")
+        print(f"  [{i}/{len(missing)}]  Installing  \033[93m{package}\033[0m ...")
         print("  " + "─" * 50)
         success = _pip_install(package)
         print("  " + "─" * 50)
         if success:
-            print(f"  \033[92m✔  {package} instalado com sucesso!\033[0m\n")
+            print(f"  \033[92m✔  {package} installed!\033[0m\n")
         else:
-            print(f"  \033[91m✘  Falha ao instalar {package}\033[0m")
-            print(f"     Instale manualmente:  pip install {package}\n")
+            print(f"  \033[91m✘  Failed to install {package}\033[0m")
+            print(f"     Install manually:  pip install {package}\n")
             failed.append(package)
 
     if failed:
         print("\033[91m" + "─" * 56 + "\033[0m")
-        print("\033[91mALGUMAS DEPENDÊNCIAS FALHARAM:\033[0m")
+        print("\033[91mSOME DEPENDENCIES FAILED:\033[0m")
         for f in failed:
             print(f"  pip install {f}")
         print("\033[91m" + "─" * 56 + "\033[0m")
-        input("\nPressione Enter para tentar iniciar mesmo assim...")
+        input("\nPress Enter to try starting anyway...")
     else:
         _box([
-            "✔  Todas as dependências foram instaladas!",
+            "✔  All dependencies installed!",
             "",
-            "Pressione Enter para iniciar o FastFile...",
-        ], color_code="\033[92m")
+            "Press Enter to start FastFile...",
+        ], color="\033[92m")
         input()
 
 
-# ─────────────────────────────────────────────
-#  PONTO DE ENTRADA
-# ─────────────────────────────────────────────
-
 def main():
-    # 1. Instalar deps PRIMEIRO — antes de qualquer import interno
     ensure_dependencies()
 
-    # 2. Só agora importar módulos que dependem dos pacotes instalados
     from core.node import P2PNode
     from ui.menu import (
         main_menu, cls,
         screen_start, screen_peers, screen_add_peer, screen_send,
-        screen_profile, screen_tor, screen_formats, screen_destruct,
+        screen_profile, screen_destruct,
         err, warn, C,
     )
 
@@ -160,29 +143,27 @@ def main():
             elif choice == '3': screen_add_peer(node)
             elif choice == '4': screen_send(node)
             elif choice == '5': screen_profile(node)
-            elif choice == '6': screen_tor(node)
-            elif choice == '7': screen_formats()
-            elif choice == '8': screen_destruct(node)
-            elif choice == '9':
+            elif choice == '6':
                 cls()
-                print(f"\n  {C['G']}Encerrando FastFile...{C['RST']}")
+                print(f"\n  {C['G']}Shutting down FastFile...{C['RST']}")
                 node.shutdown()
-                print(f"  {C['G']}Até logo!{C['RST']}\n")
+                print(f"  {C['G']}Goodbye!{C['RST']}\n")
                 break
+            elif choice == '7': screen_destruct(node)
             else:
-                warn("Opção inválida.")
+                warn("Invalid option.")
                 import time as _t; _t.sleep(1)
 
         except KeyboardInterrupt:
             cls()
-            print(f"\n  {C['Y']}Interrompido (Ctrl+C). Encerrando...{C['RST']}")
+            print(f"\n  {C['Y']}Interrupted (Ctrl+C). Shutting down...{C['RST']}")
             node.shutdown()
             break
         except Exception as e:
-            err(f"Erro inesperado: {e}")
+            err(f"Unexpected error: {e}")
             import traceback
             traceback.print_exc()
-            input("  Pressione Enter para continuar...")
+            input("  Press Enter to continue...")
 
 
 if __name__ == "__main__":
