@@ -194,6 +194,13 @@ class P2PNode:
         if self.discovery: self.discovery.stop()
         if self.server:    self.server.stop()
         if self._tor_active: tor_proxy.stop_tor()
+        # Stop local web server if running
+        try:
+            from core.local_web import stop_web_server, is_running
+            if is_running():
+                stop_web_server()
+        except Exception:
+            pass
         self._started = False
 
     # ── Self-destruct ─────────────────────────────

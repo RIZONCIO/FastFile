@@ -96,55 +96,63 @@ def check_file_allowed(filepath: Path) -> tuple:
 # ─────────────────────────────────────────────
 
 class TransferProgress:
-    """Callback simples de progresso"""
+    """
+    Single clean progress bar — one line, no spam.
+    Shows [X/N] counter when part of a batch.
+    """
 
-    def __init__(self, filename: str, total: int, direction: str = "↑"):
-        self.filename  = filename
-        self.total     = total
-        self.direction = direction
-        self.done      = 0
-        self._start    = time.time()
-        self._lock     = threading.Lock()
+    def __init__(self, filename: str, total: int, direction: str = "↑",
+                 file_index: int = 0, file_count: int = 1):
+        self.filename   = filename
+        self.total      = total
+        self.direction  = direction
+        self.file_index = file_index   # 0-based
+        self.file_count = file_count
+        self.done       = 0
+        self._start     = time.time()
+        self._lock      = threading.Lock()
+        self._printed   = False
+
+        # Print header once before the bar
+        counter = f"[{file_index+1}/{file_count}]" if file_count > 1 else ""
+        label   = f"{direction} {counter} {filename[:28]}"
+        print(f"\n  {label}")
 
     def update(self, n_bytes: int):
         with self._lock:
             self.done += n_bytes
-        self._print()
+        self._draw()
 
-    def _print(self):
+    def _draw(self):
         if self.total <= 0:
             return
-        pct  = min(100.0, self.done / self.total * 100)
-        bar  = int(pct / 3.33)        # 30 chars
-        fill = "█" * bar + "░" * (30 - bar)
+        pct     = min(100.0, self.done / self.total * 100)
+        filled  = int(pct / 3.34)        # 30 chars wide bar
+        bar     = "█" * filled + "░" * (30 - filled)
         elapsed = time.time() - self._start + 1e-9
         speed   = self.done / elapsed
-        speed_s = self._fmt_speed(speed)
-        eta     = (self.total - self.done) / speed if speed > 0 else 0
+        eta     = max(0, (self.total - self.done) / speed) if speed > 0 else 0
+        # Overwrite the SAME line each update — no spam
         print(
-            f"\r  {self.direction} {self.filename[:20]:<20} "
-            f"|{fill}| {pct:5.1f}%  {speed_s}  ETA {eta:4.0f}s",
+            f"\r  |{bar}| {pct:5.1f}%  {self._fmt(speed)}  ETA {eta:3.0f}s   ",
             end='', flush=True
         )
+        self._printed = True
 
     def finish(self, success: bool = True):
         if success:
-            elapsed = time.time() - self._start
-            speed   = self.total / elapsed if elapsed > 0 else 0
-            print(
-                f"\r  ✔  {self.filename[:20]:<20} "
-                f"{'█'*30}  100.0%  {self._fmt_speed(speed)}  OK          "
-            )
+            elapsed = time.time() - self._start + 1e-9
+            speed   = self.total / elapsed
+            # Overwrite bar with final OK line
+            print(f"\r  {'█'*30}  100%  {self._fmt(speed)}  ✔ OK          ")
         else:
-            print(f"\r  ✘  {self.filename[:20]:<20}  ERRO                                    ")
+            print(f"\r  {'░'*30}  FAILED                              ")
 
     @staticmethod
-    def _fmt_speed(bps: float) -> str:
-        if bps >= 1024**2:
-            return f"{bps/1024**2:6.1f} MB/s"
-        if bps >= 1024:
-            return f"{bps/1024:6.1f} KB/s"
-        return f"{bps:6.0f}  B/s"
+    def _fmt(bps: float) -> str:
+        if bps >= 1024**2: return f"{bps/1024**2:5.1f} MB/s"
+        if bps >= 1024:    return f"{bps/1024:5.1f} KB/s"
+        return f"{bps:5.0f}  B/s"
 
 
 # ─────────────────────────────────────────────
@@ -359,12 +367,16 @@ class FileSender:
                 resp = recv_message(sock, timeout=15.0)
                 if resp.get('type') != 'accept':
                     reason = resp.get('reason', '?')
-                    print(f"  ✘ Recusado pelo peer: {reason}")
+                    print(f"  ✘ Rejected by peer: {reason}")
                     records.append(TransferResult(fp.name, filesize, False, peer.alias, 'sent'))
                     continue
 
-                # Progresso
-                prog = TransferProgress(fp.name, filesize, "↑") if on_progress else None
+                # Progress — single clean bar with batch counter
+                prog = TransferProgress(
+                    fp.name, filesize, "↑",
+                    file_index=idx,
+                    file_count=len(valid)
+                ) if on_progress else None
 
                 # Stream encriptado
                 try:
@@ -426,26 +438,22 @@ class FileReceiver:
                 file_index = msg.get('file_index', 0)
                 file_count = msg.get('file_count', 1)
 
-                # Aceitar
+                # Accept
                 send_message(sock, {'type': 'accept'})
 
-                # Determinar caminho de destino (sem sobrescrever)
                 save_path = self._unique_path(DOWNLOADS_DIR / filename)
-
                 session_key = derive_session_key(hmac_key, salt)
                 encryptor   = FileEncryptor(session_key)
 
                 prog = TransferProgress(
-                    filename, filesize, "↓"
+                    filename, filesize, "↓",
+                    file_index=file_index,
+                    file_count=file_count
                 )
-                prog_label = f"  [{file_index+1}/{file_count}]"
-                print(f"\n{prog_label} Recebendo de {addr[0]}  →  {filename}")
 
                 success = False
                 try:
                     _recv_and_decrypt(sock, save_path, encryptor, filesize, prog)
-
-                    # Verificar HMAC
                     done_msg = recv_message(sock, timeout=15.0)
                     expected_hmac = done_msg.get('hmac', '')
                     ok = verify_file_hmac(save_path, hmac_key, expected_hmac)
@@ -454,9 +462,9 @@ class FileReceiver:
                     success = ok
                     prog.finish(success)
                     if success:
-                        print(f"  ✔ Salvo em: {save_path}")
+                        print(f"  ✔ Saved: {save_path.name}")
                     else:
-                        print(f"  ✘ Integridade falhou — arquivo removido")
+                        print(f"  ✘ Integrity check failed — file removed")
                         save_path.unlink(missing_ok=True)
 
                 except Exception as e:
@@ -464,11 +472,9 @@ class FileReceiver:
                     send_message(sock, {'type': 'error', 'reason': str(e)})
                     save_path.unlink(missing_ok=True)
 
-                # Notificar (apenas na tela, sem armazenar)
                 if self._on_receive and success:
                     self._on_receive(filename, addr[0], filesize)
 
-                # Se há mais arquivos no batch, continuar loop
                 if file_index + 1 >= file_count:
                     break
 

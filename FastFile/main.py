@@ -12,7 +12,7 @@ import subprocess
 import platform
 
 APP_NAME    = "FastFile"
-APP_VERSION = "3.4"
+APP_VERSION = "3.5"
 
 if sys.version_info < (3, 8):
     print(f"[{APP_NAME}] ERROR: Python 3.8+ required. Current: {sys.version}")
