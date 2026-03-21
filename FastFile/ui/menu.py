@@ -224,37 +224,53 @@ def screen_peers(node):
     info("IP addresses are never shown — connections use Node ID only.")
     pause()
 
-# ── [3] Connect by Node ID ─────────────────────────────────────────────────────
+# ── [3] Connect to peer ────────────────────────────────────────────────────────
 
 def screen_add_peer(node):
     cls()
     print(title("CONNECT TO PEER"))
     if not node._started:
         warn("Node not started. Use [1] first."); pause(); return
-    section("Why Node ID instead of IP?")
-    print(f"  {C['DIM']}Using Node IDs keeps IP addresses hidden from both sides.{C['RST']}")
-    print(f"  {C['DIM']}Exposed IPs can lead to DDoS or targeted attacks.{C['RST']}")
+
+    section("ℹ  When do you need this?")
+    print(f"  {C['DIM']}If both PCs are on the SAME Wi-Fi, they find each other{C['RST']}")
+    print(f"  {C['DIM']}automatically — you don't need this option at all.{C['RST']}")
     print()
-    section("Cross-network options")
-    bullet("VPN (Tailscale, ZeroTier, WireGuard) — easiest, hides real IPs")
-    bullet("Tor active on both sides — use [1] to enable")
-    bullet("Port forward TCP 55771 — exposes real IP (less private)")
+    print(f"  {C['DIM']}Use this ONLY when the two PCs are in different locations{C['RST']}")
+    print(f"  {C['DIM']}(different houses, different networks).{C['RST']}")
     print()
-    info("Same-network peers: auto-discovered in [2], no action needed.")
+
+    section("🔒  How to connect between different locations")
+    print(f"  {C['DIM']}The safest way is to use Tor (option [1]). With Tor active{C['RST']}")
+    print(f"  {C['DIM']}on BOTH computers, neither side sees the other's real location.{C['RST']}")
     print()
-    node_id_input = prompt("Enter peer Node ID (or IP for VPN/port-forward)").strip()
+    print(f"  {C['DIM']}Another option is a free VPN like Tailscale (tailscale.com).{C['RST']}")
+    print(f"  {C['DIM']}Install it on both PCs, and use the VPN address shown there.{C['RST']}")
+    print()
+
+    section("📋  How to connect")
+    print(f"  {C['DIM']}1. The other person opens FastFile and goes to [5] Profile.{C['RST']}")
+    print(f"  {C['DIM']}2. They share their CODE (shown under \"Node ID\").{C['RST']}")
+    print(f"  {C['DIM']}3. You paste that code below.{C['RST']}")
+    print()
+    info("Same Wi-Fi? No need to do any of this — just check [2] View peers.")
+    print()
+
+    node_id_input = prompt("Paste the other person's CODE here").strip()
     if not node_id_input:
         warn("Cancelled."); pause(); return
+
     from core.network import SERVICE_PORT
     try:
-        port = int(prompt("Port", str(SERVICE_PORT)))
+        port = int(prompt("Port (leave default unless told otherwise)", str(SERVICE_PORT)))
     except ValueError:
         err("Invalid port."); pause(); return
+
     if node.add_peer_by_node_id(node_id_input, port):
-        ok(f"Peer added: {node_id_input}")
-        info("Heartbeat will confirm status within 20s. Check [2].")
+        ok(f"Connected! Looking for peer...")
+        info("Check [2] View peers in about 20 seconds to confirm.")
     else:
-        err("Failed. Is the node started?")
+        err("Could not connect. Make sure the node is started ([1]).")
     pause()
 
 # ── [4] Send file(s) ──────────────────────────────────────────────────────────
@@ -262,23 +278,41 @@ def screen_add_peer(node):
 def screen_send(node):
     cls()
     print(title("SEND FILE(S)"))
+
+    # ── Escolha principal: peer ou celular ──
+    section("What do you want to do?")
+    print(f"  {C['B']}[1]{C['RST']}  📤  Send file(s) to another PC / peer")
+    print(f"  {C['M']}[2]{C['RST']}  📱  Send / receive files with your phone  {C['DIM']}(browser, no app){C['RST']}")
+    print()
+    main_choice = prompt("Option", "1")
+
+    if main_choice == "2":
+        _start_web_server_screen()
+        return
+
+    if main_choice != "1":
+        err("Invalid option."); pause(); return
+
+    # ── Modo peer ──
     if not node._started:
         warn("Node not started. Use [1] first."); pause(); return
+
     peers = node.list_peers()
     if not peers:
-        warn("No peers available.")
-        info("Use [2] to see peers or [3] to connect by Node ID.")
+        warn("No peers found yet.")
+        info("Make sure the other PC has FastFile open and started (option [1]).")
+        info("If on different networks, use option [3] to connect manually.")
         pause(); return
 
+    print()
     section("Select recipient")
-    print(f"  {'#':<3}  {'ALIAS':<22}  {'NODE ID'}")
+    print(f"  {'#':<3}  {'ALIAS':<22}  {'CODE'}")
     print(hr())
     for i, p in enumerate(peers, 1):
         print(f"  {C['B']}{i:<3}{C['RST']}  {C['W']}{p.alias:<22}{C['RST']}  {C['DIM']}{p.node_id}{C['RST']}")
     print()
-    info("IP addresses are hidden — connections use Node ID only.")
-    print()
-    peer_choice = prompt("Peer number (or alias / Node ID)")
+
+    peer_choice = prompt("Peer number (or their code)")
     peer = None
     if peer_choice.isdigit():
         idx = int(peer_choice) - 1
@@ -287,22 +321,23 @@ def screen_send(node):
     else:
         peer = node._resolve_peer(peer_choice)
     if not peer:
-        err("Invalid peer."); pause(); return
+        err("Peer not found."); pause(); return
 
-    ok(f"Recipient: {peer.alias}  [ID: {peer.node_id}]")
+    ok(f"Sending to: {peer.alias}")
     print()
-    section("Send mode")
+
+    section("How many files?")
     from ui.file_picker import gui_mode_label
     info(f"File selector: {gui_mode_label()}")
     print()
-    print(f"  {C['B']}[1]{C['RST']}  Send 1 file to peer        (max 20 MB)")
-    print(f"  {C['B']}[2]{C['RST']}  Send multiple files to peer (max 200 MB total)")
-    print(f"  {C['M']}[3]{C['RST']}  📱 Mobile web transfer      (phone ↔ PC via browser)")
+    print(f"  {C['B']}[1]{C['RST']}  Send 1 file            (max 20 MB)")
+    print(f"  {C['B']}[2]{C['RST']}  Send multiple files     (max 200 MB total)")
+    print(f"  {C['M']}[3]{C['RST']}  Send files in password-protected ZIP  {C['DIM']}(extra security){C['RST']}")
     print()
     mode = prompt("Mode", "1")
     if mode == "1":   _send_single(node, peer)
     elif mode == "2": _send_batch(node, peer)
-    elif mode == "3": _start_web_server_screen()
+    elif mode == "3": _send_zip_password(node, peer)
     else: err("Invalid option."); pause()
 
 
@@ -396,6 +431,143 @@ def _send_batch(node, peer):
         print(f"  {mark}  {r.filename}")
     pause()
 
+
+def _send_zip_password(node, peer):
+    """
+    Packs selected files into a password-protected ZIP,
+    then sends the ZIP via the normal P2P channel.
+    The password is shown to the sender — they share it separately (e.g. by voice or message).
+    """
+    import zipfile
+    import tempfile
+    import secrets
+    import string
+
+    section("Send files in password-protected ZIP")
+    from ui.file_picker import pick_files, gui_mode_label
+    from core.transfer import check_file_allowed, MAX_BATCH_TOTAL
+
+    info(f"Opening selector ({gui_mode_label()})...")
+    info("Select the files to pack into the ZIP.")
+    print()
+    raw_paths = pick_files()
+    if not raw_paths:
+        warn("No files selected."); pause(); return
+
+    # Validate
+    filepaths = []
+    batch_bytes = 0
+    print()
+    for raw in raw_paths:
+        p = Path(raw)
+        if not p.exists() or not p.is_file():
+            warn(f"Skipped: {Path(raw).name}"); continue
+        allowed, msg = check_file_allowed(p)
+        if not allowed:
+            err(f"{p.name} — blocked"); continue
+        sz = p.stat().st_size
+        if batch_bytes + sz > MAX_BATCH_TOTAL:
+            warn(f"{p.name} skipped — batch limit."); continue
+        batch_bytes += sz
+        filepaths.append(p)
+        ok(f"  {p.name}  ({sz/1024:.1f} KB)")
+
+    if not filepaths:
+        warn("No valid files."); pause(); return
+
+    # Generate a strong random password
+    alphabet  = string.ascii_letters + string.digits + "!@#$%&*"
+    password  = ''.join(secrets.choice(alphabet) for _ in range(16))
+
+    print()
+    info(f"Files selected : {len(filepaths)}")
+    info(f"Total size     : {batch_bytes/1024/1024:.1f} MB")
+    print()
+    print(f"  {C['W']}Generated password (share this with the recipient separately):{C['RST']}")
+    print()
+    print(f"  {C['G']}  ┌─────────────────────┐{C['RST']}")
+    print(f"  {C['G']}  │  {C['W']}{password}{C['G']}  │{C['RST']}")
+    print(f"  {C['G']}  └─────────────────────┘{C['RST']}")
+    print()
+    warn("Write down or copy the password BEFORE confirming.")
+    warn("It will NOT be shown again after the transfer.")
+    print()
+    if not confirm("Confirm? (password saved?)"): warn("Cancelled."); pause(); return
+
+    # Create password-protected ZIP using Python's zipfile with pwd
+    print()
+    info("Creating encrypted ZIP...")
+    tmp_dir = Path(tempfile.mkdtemp())
+    zip_path = tmp_dir / "protected_files.zip"
+
+    try:
+        # Python's built-in zipfile supports password encryption (ZipCrypto)
+        # For stronger AES encryption, try pyzipper
+        try:
+            import pyzipper
+            with pyzipper.AESZipFile(str(zip_path), 'w',
+                                     compression=pyzipper.ZIP_DEFLATED,
+                                     encryption=pyzipper.WZ_AES) as zf:
+                zf.setpassword(password.encode('utf-8'))
+                for fp in filepaths:
+                    zf.write(str(fp), fp.name)
+            enc_method = "AES-256"
+        except ImportError:
+            # Fallback to standard ZipCrypto (weaker but built-in)
+            with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+                for fp in filepaths:
+                    zf.write(str(fp), fp.name)
+                # Apply password via low-level method
+                for zi in zf.infolist():
+                    zi.flag_bits |= 0x1
+            # zipfile doesn't support writing passwords natively — rewrite with pyminizip
+            try:
+                import pyminizip
+                zip_path.unlink(missing_ok=True)
+                pyminizip.compress_multiple(
+                    [str(fp) for fp in filepaths],
+                    [fp.name for fp in filepaths],
+                    str(zip_path), password, 5
+                )
+                enc_method = "ZipCrypto"
+            except ImportError:
+                # Last fallback: just ZIP without password and warn
+                with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for fp in filepaths:
+                        zf.write(str(fp), fp.name)
+                enc_method = "none (install pyzipper for encryption: pip install pyzipper)"
+
+        ok(f"ZIP created — encryption: {enc_method}")
+        info(f"ZIP size: {zip_path.stat().st_size/1024:.1f} KB")
+        print()
+
+        # Send the ZIP via normal P2P
+        info("Sending ZIP via P2P...")
+        success = node.send_file(peer.node_id, str(zip_path))
+        print()
+        if success:
+            ok("ZIP sent successfully!")
+            print()
+            print(f"  {C['W']}Remind the recipient of the password:{C['RST']}")
+            print(f"  {C['G']}  {password}{C['RST']}")
+            print()
+            info("Send the password via a SEPARATE channel (voice call, Signal, etc.).")
+            info("Never send the password in the same message as the file.")
+        else:
+            err("Transfer failed.")
+
+    except Exception as e:
+        err(f"Could not create ZIP: {e}")
+    finally:
+        try:
+            zip_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except Exception:
+            pass
+
+    pause()
+
+
 # ── [5] Profile / Settings ────────────────────────────────────────────────────
 
 def screen_profile(node):
@@ -444,25 +616,74 @@ def screen_profile(node):
     info(f"Batch limit    : {C['W']}{MAX_BATCH_TOTAL//1024//1024} MB total{C['RST']}")
     warn("To send blocked formats: compress into .zip first.")
 
-    # ── Share via Email ──
-    section("📧  Share FastFile via secure email")
-    print(f"  {C['DIM']}Compresses FastFile into a ZIP and opens your email client.{C['RST']}")
-    print(f"  {C['DIM']}Only disposable addresses accepted — no Gmail, Outlook, Yahoo, etc.{C['RST']}")
-    print(f"  {C['DIM']}Examples: guerrillamail.com, mailinator.com, yopmail.com,{C['RST']}")
-    print(f"  {C['DIM']}          10minutemail.com, maildrop.cc, trashmail.com{C['RST']}")
+    # ── Share FastFile ──
+    section("🔗  Share FastFile with someone")
+    print(f"  {C['DIM']}Saves FastFile.zip to your Downloads folder.{C['RST']}")
+    print(f"  {C['DIM']}Send the ZIP via WhatsApp, Telegram, USB, Google Drive, etc.{C['RST']}")
+    print(f"  {C['DIM']}The other person extracts it and runs: python main.py{C['RST']}")
     print()
-    if confirm("Share FastFile via email now?"):
-        _share_via_email(node)
+    if confirm("Save FastFile.zip to Downloads now?"):
+        _save_zip_only(node)
 
     pause()
 
 
+def _share_via_link(node):
+    """Upload ZIP to anonymous host and show download link + QR code."""
+    from core.share_link import upload_and_get_link, print_qr_terminal
+
+    print()
+    warn("This uploads FastFile.zip to a free anonymous file host.")
+    warn("Your IP will be sent to that server. Use Tor ([1]) to avoid this.")
+    print()
+
+    if node.is_tor_active():
+        ok("Tor is active — upload will be routed through Tor.")
+    else:
+        info("Tip: enable Tor in [1] before uploading for better privacy.")
+    print()
+
+    if not confirm("Upload and get a download link?"):
+        warn("Cancelled."); return
+
+    print()
+    project_dir = Path(sys.argv[0]).resolve().parent
+
+    def _prog(msg):
+        print(f"  {C['M']}→  {msg}{C['RST']}")
+
+    success, result, service = upload_and_get_link(project_dir, progress_cb=_prog)
+    print()
+
+    if success:
+        ok(f"Uploaded to {service}!")
+        print()
+        print(f"  {C['W']}Download link:{C['RST']}")
+        print()
+        _print_url_box(result)
+        print(f"  {C['DIM']}Share this link via WhatsApp, Telegram, Signal, or any chat.{C['RST']}")
+        print(f"  {C['DIM']}The link expires automatically — no permanent trace.{C['RST']}")
+        print()
+        print(f"  {C['W']}QR Code (scan with phone camera):{C['RST']}")
+        print_qr_terminal(result)
+    else:
+        warn("Upload failed. FastFile.zip was saved locally instead.")
+        print()
+        for line in result.split('\n'):
+            if line.strip():
+                print(f"  {C['DIM']}{line}{C['RST']}")
+
+
 def _share_via_email(node):
-    """Handles the email sharing flow inside Profile."""
+    """Create ZIP + open system email client with pre-filled draft."""
     from core.share_email import validate_email, send_fastfile_email
 
     print()
-    email = prompt("Recipient temporary email address").strip().lower()
+    info("Only temporary/disposable email addresses are accepted.")
+    info("Examples: guerrillamail.com  mailinator.com  yopmail.com")
+    info("          10minutemail.com   maildrop.cc     trashmail.com")
+    print()
+    email = prompt("Recipient email address").strip().lower()
     if not email:
         warn("Cancelled."); return
 
@@ -475,9 +696,8 @@ def _share_via_email(node):
         return
 
     print()
-    info(f"Recipient: {email}")
-    warn("FastFile will be compressed and your email client will open.")
-    warn("You will need to attach the ZIP manually to the email draft.")
+    info(f"To: {email}")
+    warn("Your email app will open with a draft — attach the ZIP and send.")
     print()
     if not confirm("Continue?"):
         warn("Cancelled."); return
@@ -491,7 +711,7 @@ def _share_via_email(node):
     success, msg = send_fastfile_email(email, project_dir, progress_cb=_prog)
     print()
     if success:
-        ok("ZIP created and email client opened!")
+        ok("ZIP created and email app opened!")
         print()
         for line in msg.split('\n'):
             if line.strip():
@@ -500,58 +720,149 @@ def _share_via_email(node):
         err(f"Failed: {msg}")
 
 
+def _save_zip_only(node):
+    """Just compress and save the ZIP to Downloads."""
+    from core.share_link import zip_project
+    from pathlib import Path as _P
+    import sys as _sys
+
+    project_dir = _P(_sys.argv[0]).resolve().parent
+    downloads   = _P.home() / "Downloads"
+    downloads.mkdir(exist_ok=True)
+    zip_path = downloads / "FastFile.zip"
+
+    print()
+    info(f"Saving ZIP to: {zip_path}")
+
+    def _prog(msg):
+        print(f"  {C['M']}→  {msg}{C['RST']}")
+
+    _prog("Compressing...")
+    ok_flag, info_str = zip_project(project_dir, zip_path)
+    print()
+    if ok_flag:
+        ok(f"Saved: {zip_path}  ({info_str})")
+        info("Share this file however you like — USB, cloud drive, messaging app.")
+    else:
+        err(f"Failed: {info_str}")
+
+
 def _start_web_server_screen():
-    """Starts or stops the local web server and shows connection info."""
+    """Mobile web transfer — com seleção de IP para múltiplas redes Wi-Fi."""
     from core.local_web import start_web_server, stop_web_server, is_running
+    from core.network import get_local_ips
 
     cls()
     print(title("MOBILE WEB TRANSFER"))
 
+    # Toggle se já estiver rodando
     if is_running():
         section("📱  Web server is RUNNING")
-        warn("The local web server is active. Your phone can connect now.")
+        warn("Your phone can connect right now.")
         print()
         if confirm("Stop the web server?"):
             stop_web_server()
-            ok("Web server stopped.")
+            ok("Stopped.")
         else:
-            ok("Server stays running.")
+            ok("Still running.")
         pause()
         return
 
-    section("📱  PC ↔ Phone / Tablet via Browser")
-    print(f"  {C['DIM']}Your phone opens a web page — no app needed, just a browser.{C['RST']}")
-    print(f"  {C['DIM']}Works ONLY on your local Wi-Fi — blocked from outside your home.{C['RST']}")
-    print(f"  {C['DIM']}PIN-protected — a 6-digit code shown in this terminal.{C['RST']}")
+    section("📱  How it works")
+    print(f"  {C['DIM']}FastFile opens a page on your phone's browser — no app needed.{C['RST']}")
+    print(f"  {C['DIM']}Your phone and PC must be on the SAME Wi-Fi.{C['RST']}")
+    print(f"  {C['DIM']}A 6-digit PIN protects the page from unwanted access.{C['RST']}")
+    print(f"  {C['DIM']}Cannot be accessed from outside your home network.{C['RST']}")
     print()
-    info("Phone and PC must be on the SAME Wi-Fi network.")
+
+    # Detectar todos os IPs locais
+    all_ips = get_local_ips()
+    # Filtrar apenas IPs privados reais (excluir 127.x e 169.254.x)
+    import ipaddress as _ipmod
+    lan_ips = []
+    for ip in all_ips:
+        try:
+            a = _ipmod.ip_address(ip)
+            if a.is_private and not str(a).startswith('127.') and not str(a).startswith('169.254.'):
+                lan_ips.append(ip)
+        except Exception:
+            pass
+
+    if not lan_ips:
+        err("No local network IP detected. Make sure you're connected to Wi-Fi.")
+        pause()
+        return
+
+    # Selecionar IP se houver mais de um (ex: 2.4 GHz e 5 GHz)
+    chosen_ip = lan_ips[0]
+    if len(lan_ips) > 1:
+        section("📡  Multiple networks detected")
+        print(f"  {C['DIM']}Your PC is connected to more than one network.{C['RST']}")
+        print(f"  {C['DIM']}Choose the one your phone is also connected to.{C['RST']}")
+        print()
+        print(f"  {C['DIM']}Tip: 192.168.x.x addresses are usually home Wi-Fi.{C['RST']}")
+        print(f"  {C['DIM']}If you have 2.4 GHz and 5 GHz, prefer 2.4 GHz — longer range.{C['RST']}")
+        print()
+        for i, ip in enumerate(lan_ips, 1):
+            # Tenta identificar a faixa para dar dica
+            hint = ""
+            if ip.startswith("192.168."): hint = f"  {C['DIM']}(home Wi-Fi){C['RST']}"
+            elif ip.startswith("10."):    hint = f"  {C['DIM']}(VPN or enterprise){C['RST']}"
+            elif ip.startswith("172."):   hint = f"  {C['DIM']}(Docker or VPN){C['RST']}"
+            print(f"  {C['B']}[{i}]{C['RST']}  {C['W']}{ip}{C['RST']}{hint}")
+        print()
+        choice_str = prompt(f"Which network? [1-{len(lan_ips)}]", "1")
+        try:
+            idx = int(choice_str) - 1
+            if 0 <= idx < len(lan_ips):
+                chosen_ip = lan_ips[idx]
+            else:
+                chosen_ip = lan_ips[0]
+        except ValueError:
+            chosen_ip = lan_ips[0]
+        ok(f"Using: {chosen_ip}")
+    else:
+        info(f"Network detected: {chosen_ip}")
+
     print()
-    if not confirm("Start mobile web server?"):
+    if not confirm("Start the mobile web server?"):
         warn("Cancelled."); pause(); return
 
     print()
-    result = start_web_server()
+    result = start_web_server(chosen_ip=chosen_ip)
     print()
 
     if not result['ok']:
-        err(f"Could not start: {result['msg']}"); pause(); return
+        err(f"Could not start: {result['msg']}")
+        pause(); return
 
-    url = result['url']
-    pin = result['pin']
+    url  = result['url']
+    pin  = result['pin']
+    https_note = result.get('https', False)
 
-    ok("Web server running!")
+    ok("Web server is running!")
     print()
-    print(f"  {C['W']}1. Open your phone browser and go to:{C['RST']}")
+
+    # Instruções claras em 3 passos
+    print(f"  {C['W']}Step 1{C['RST']} — Connect your phone to Wi-Fi: {C['G']}{chosen_ip.rsplit('.', 1)[0]}.x{C['RST']}")
+    print()
+    print(f"  {C['W']}Step 2{C['RST']} — Open your phone browser and type:")
     print()
     _print_url_box(url)
-    print(f"  {C['W']}2. Enter this PIN when asked:{C['RST']}")
+
+    print(f"  {C['W']}Step 3{C['RST']} — Enter this PIN on the page:")
     print()
-    print(f"  {C['G']}     {' '.join(list(pin))}{C['RST']}")
+    # PIN com espaços para facilitar leitura
+    spaced_pin = "  ".join(list(pin))
+    print(f"  {C['G']}  ┌──────────────┐{C['RST']}")
+    print(f"  {C['G']}  │  {C['W']}{spaced_pin}{C['G']}  │{C['RST']}")
+    print(f"  {C['G']}  └──────────────┘{C['RST']}")
     print()
-    info("Files you upload from your phone are saved to the FastFile downloads folder.")
-    info("Files in that folder can be downloaded to your phone from the web page.")
+
+    info("Files sent from your phone are saved in the FastFile downloads folder.")
+    info("Files in that folder appear on the page for your phone to download.")
     print()
-    warn("To stop the server: go back to Send [4] > Mobile web transfer.")
+    warn("To stop: choose [4] Send > Phone/Tablet again and select Stop.")
     pause()
 
 

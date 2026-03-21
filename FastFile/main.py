@@ -25,6 +25,7 @@ REQUIRED = {
     'zeroconf':     'zeroconf>=0.60',
     'stem':         'stem>=1.8',
     'socks':        'PySocks>=1.7',
+    'pyzipper':     'pyzipper>=0.3',
 }
 
 _W = 54
