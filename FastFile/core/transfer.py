@@ -61,33 +61,32 @@ BLOCKED_EXTENSIONS = {
 }
 
 
-def check_file_allowed(filepath: Path) -> tuple:
+def check_file_allowed(filepath: Path, max_size: int = None) -> tuple:
     """
     Verifica se o arquivo pode ser enviado.
-    Retorna (allowed: bool, message: str | None).
+    max_size: override de limite (Easter Egg). Se None, usa MAX_SINGLE_FILE.
     """
-    ext  = filepath.suffix.lower()
-    size = filepath.stat().st_size if filepath.exists() else 0
+    ext   = filepath.suffix.lower()
+    size  = filepath.stat().st_size if filepath.exists() else 0
+    limit = max_size if max_size is not None else MAX_SINGLE_FILE
 
     if ext in BLOCKED_EXTENSIONS:
         return False, (
-            f"Extensão '{ext}' não é suportada pelo FastFile.\n"
-            f"  Use a opção [6] do menu para ver todos os formatos bloqueados."
+            f"Extension '{ext}' is not supported by FastFile.\n"
+            f"  Use [5] Profile to see all blocked formats."
         )
 
-    if size > MAX_SINGLE_FILE:
-        mb = size / 1024 / 1024
+    if size > limit:
+        mb     = size / 1024 / 1024
+        lim_mb = limit // 1024 // 1024
         return False, (
-            f"Arquivo excede o limite de {MAX_SINGLE_FILE // 1024 // 1024} MB por arquivo.\n"
-            f"  Tamanho detectado: {mb:.1f} MB — envio recusado."
+            f"File exceeds the {lim_mb} MB limit.\n"
+            f"  Detected size: {mb:.1f} MB — rejected."
         )
 
     if size > WARN_SIZE_THRESH:
         mb = size / 1024 / 1024
-        return True, (
-            f"AVISO DE TAMANHO: {filepath.name} tem {mb:.1f} MB.\n"
-            f"  A compressão e o envio podem levar alguns segundos."
-        )
+        return True, f"Size warning: {filepath.name} is {mb:.1f} MB."
 
     return True, None
 
@@ -275,18 +274,20 @@ def _recv_and_decrypt(sock: ssl.SSLSocket, dst_path: Path,
 
 class FileSender:
 
-    def __init__(self, my_id: str, ssl_ctx: ssl.SSLContext):
-        self.my_id   = my_id
-        self.ssl_ctx = ssl_ctx
+    def __init__(self, my_id: str, ssl_ctx: ssl.SSLContext,
+                 my_alias: str = '', max_single: int = None, max_batch: int = None):
+        self.my_id      = my_id
+        self.my_alias   = my_alias
+        self.ssl_ctx    = ssl_ctx
+        self.max_single = max_single or MAX_SINGLE_FILE
+        self.max_batch  = max_batch  or MAX_BATCH_TOTAL
 
     def send_single(self, peer: Peer, filepath: Path,
                     on_progress: bool = True) -> TransferRecord:
-        """Envia um único arquivo"""
         return self._send_batch(peer, [filepath], on_progress)[0]
 
     def send_batch(self, peer: Peer, filepaths: List[Path],
                    on_progress: bool = True) -> List[TransferRecord]:
-        """Envia múltiplos arquivos em sequência na mesma conexão TLS"""
         return self._send_batch(peer, filepaths, on_progress)
 
     def _send_batch(self, peer: Peer, filepaths: List[Path],
@@ -299,15 +300,15 @@ class FileSender:
         for fp in filepaths:
             fp = Path(fp)
             if not fp.exists():
-                print(f"  ✘ Arquivo não encontrado: {fp}")
+                print(f"  ✘ File not found: {fp}")
                 records.append(TransferResult(fp.name, 0, False, peer.alias, 'sent'))
                 continue
             if not fp.is_file():
-                print(f"  ✘ Não é um arquivo: {fp}")
+                print(f"  ✘ Not a file: {fp}")
                 records.append(TransferResult(fp.name, 0, False, peer.alias, 'sent'))
                 continue
 
-            allowed, msg = check_file_allowed(fp)
+            allowed, msg = check_file_allowed(fp, self.max_single)
             if not allowed:
                 print(f"  ✘ {msg}")
                 records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
@@ -317,9 +318,9 @@ class FileSender:
 
             # Checar total do lote
             batch_total += fp.stat().st_size
-            if batch_total > MAX_BATCH_TOTAL:
-                mb_lim = MAX_BATCH_TOTAL // 1024 // 1024
-                print(f"  ✘ Lote excederia {mb_lim} MB total — {fp.name} ignorado.")
+            if batch_total > self.max_batch:
+                mb_lim = self.max_batch // 1024 // 1024
+                print(f"  ✘ Batch would exceed {mb_lim} MB — {fp.name} skipped.")
                 records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
                 batch_total -= fp.stat().st_size
                 continue
@@ -329,11 +330,11 @@ class FileSender:
         if not valid:
             return records
 
-        # Conectar
+        # Connect
         try:
             sock = connect_to_peer(peer, self.ssl_ctx)
         except Exception as e:
-            print(f"  ✘ Falha ao conectar: {e}")
+            print(f"  ✘ Connection failed: {e}")
             for fp in valid:
                 records.append(TransferResult(fp.name, fp.stat().st_size, False, peer.alias, 'sent'))
             return records
@@ -344,24 +345,24 @@ class FileSender:
             for idx, fp in enumerate(valid):
                 filesize = fp.stat().st_size
 
-                # Gerar chave de sessão única por arquivo
                 salt        = secrets.token_bytes(32)
                 hmac_key    = secrets.token_bytes(32)
                 session_key = derive_session_key(hmac_key, salt)
                 encryptor   = FileEncryptor(session_key)
 
-                # Oferta
+                # Offer — includes sender alias for Easter Egg detection on receiver
                 send_message(sock, {
-                    'type':       'offer',
-                    'batch_id':   batch_id,
-                    'file_index': idx,
-                    'file_count': len(valid),
-                    'filename':   fp.name,
-                    'size':       filesize,
-                    'hmac_key':   hmac_key.hex(),
-                    'salt':       salt.hex(),
-                    'sender_id':  self.my_id,
-                    'compressed': True,
+                    'type':         'offer',
+                    'batch_id':     batch_id,
+                    'file_index':   idx,
+                    'file_count':   len(valid),
+                    'filename':     fp.name,
+                    'size':         filesize,
+                    'hmac_key':     hmac_key.hex(),
+                    'salt':         salt.hex(),
+                    'sender_id':    self.my_id,
+                    'sender_alias': self.my_alias,
+                    'compressed':   True,
                 })
 
                 resp = recv_message(sock, timeout=15.0)
@@ -431,12 +432,21 @@ class FileReceiver:
                 if msg.get('type') != 'offer':
                     break
 
-                filename   = os.path.basename(msg['filename'])
-                filesize   = int(msg['size'])
-                hmac_key   = bytes.fromhex(msg['hmac_key'])
-                salt       = bytes.fromhex(msg['salt'])
-                file_index = msg.get('file_index', 0)
-                file_count = msg.get('file_count', 1)
+                filename     = os.path.basename(msg['filename'])
+                filesize     = int(msg['size'])
+                hmac_key     = bytes.fromhex(msg['hmac_key'])
+                salt         = bytes.fromhex(msg['salt'])
+                file_index   = msg.get('file_index', 0)
+                file_count   = msg.get('file_count', 1)
+                sender_alias = msg.get('sender_alias', '')
+
+                # Easter Egg: show Matrix/MrRobot effect on first file of batch
+                if file_index == 0 and sender_alias:
+                    try:
+                        from core.easter_egg import show_receive_egg
+                        show_receive_egg(sender_alias)
+                    except Exception:
+                        pass
 
                 # Accept
                 send_message(sock, {'type': 'accept'})

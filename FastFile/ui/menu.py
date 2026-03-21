@@ -721,30 +721,49 @@ def _share_via_email(node):
 
 
 def _save_zip_only(node):
-    """Just compress and save the ZIP to Downloads."""
-    from core.share_link import zip_project
-    from pathlib import Path as _P
+    """Compress FastFile project to ZIP and save to Downloads."""
+    import zipfile as _zf
     import sys as _sys
+    from pathlib import Path as _P
 
     project_dir = _P(_sys.argv[0]).resolve().parent
     downloads   = _P.home() / "Downloads"
     downloads.mkdir(exist_ok=True)
     zip_path = downloads / "FastFile.zip"
 
-    print()
-    info(f"Saving ZIP to: {zip_path}")
+    SKIP_DIRS = {'__pycache__', '.git', 'tor_data', 'tor_bin', 'downloads'}
+    SKIP_EXTS = {'.pyc', '.pyo', '.log', '.tmp'}
 
-    def _prog(msg):
-        print(f"  {C['M']}→  {msg}{C['RST']}")
-
-    _prog("Compressing...")
-    ok_flag, info_str = zip_project(project_dir, zip_path)
     print()
-    if ok_flag:
-        ok(f"Saved: {zip_path}  ({info_str})")
-        info("Share this file however you like — USB, cloud drive, messaging app.")
-    else:
-        err(f"Failed: {info_str}")
+    info(f"Saving to: {zip_path}")
+
+    try:
+        with _zf.ZipFile(str(zip_path), 'w', _zf.ZIP_DEFLATED) as zf:
+            count = 0
+            for item in sorted(project_dir.rglob('*')):
+                if any(part in SKIP_DIRS for part in item.parts): continue
+                if item.suffix in SKIP_EXTS: continue
+                if '.fastfile' in str(item): continue
+                if item.is_file():
+                    zf.write(str(item), str(item.relative_to(project_dir.parent)))
+                    count += 1
+        size_mb = zip_path.stat().st_size / 1024 / 1024
+        print()
+        ok(f"FastFile.zip saved!  ({count} files · {size_mb:.2f} MB)")
+        print()
+        print(f"  {C['W']}Share this message with the other person:{C['RST']}")
+        print()
+        print(f"  {C['G']}  ┌{'─'*58}┐{C['RST']}")
+        print(f"  {C['G']}  │{C['RST']}  Hey! I'm sending you FastFile — a secure P2P tool.   {C['G']}│{C['RST']}")
+        print(f"  {C['G']}  │{C['RST']}  1. Extract FastFile.zip                              {C['G']}│{C['RST']}")
+        print(f"  {C['G']}  │{C['RST']}  2. Run:  python main.py                              {C['G']}│{C['RST']}")
+        print(f"  {C['G']}  │{C['RST']}  3. Start the node and share your Code with me        {C['G']}│{C['RST']}")
+        print(f"  {C['G']}  │{C['RST']}  No account. No servers. Fully encrypted.             {C['G']}│{C['RST']}")
+        print(f"  {C['G']}  └{'─'*58}┘{C['RST']}")
+        print()
+        info("Send FastFile.zip via WhatsApp, Telegram, USB, or any messaging app.")
+    except Exception as e:
+        err(f"Failed to create ZIP: {e}")
 
 
 def _start_web_server_screen():

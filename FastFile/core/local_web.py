@@ -153,11 +153,20 @@ def _home_page(files: list) -> bytes:
         '<h2>// upload :: phone_to_pc</h2>'
         '<div class="card">'
         f'<p>Select file (max {max_mb} MB):</p>'
-        '<form method="POST" action="/up" enctype="multipart/form-data" id="f">'
-        '<input type="file" name="file" accept="*/*" onchange="go()">'
-        '<input type="submit" value="[ TRANSMIT ]">'
-        '<div id="pw"><div id="pb"></div><div id="pl">>> uploading...</div></div>'
-        '</form></div>'
+        '<form method="POST" action="/up" enctype="multipart/form-data" id="uf">'
+        '<input type="file" name="file" accept="*/*" id="fi">'
+        '<div id="btn-wrap">'
+        '<input type="submit" id="sub" value="[ SELECT A FILE FIRST ]" disabled>'
+        '</div>'
+        '<div id="pw" style="display:none;margin-top:10px">'
+        '<div id="pb" style="height:5px;background:#00ff41;width:100%;'
+        'animation:pulse 1s ease-in-out infinite;box-shadow:0 0 6px #00ff41"></div>'
+        '<div id="pl" style="font-size:11px;color:#00b32c;margin-top:4px">'
+        '>> uploading — please wait...</div>'
+        '</div>'
+        '</form>'
+        '<style>@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}</style>'
+        '</div>'
         + dl +
         '<div class="card" style="margin-top:14px">'
         '<p class="dim">>> lan-only // no external access // pin-protected</p>'
@@ -165,12 +174,20 @@ def _home_page(files: list) -> bytes:
         '<button class="stop" type="submit">[ DISCONNECT ]</button>'
         '</form></div>'
         '<script>'
-        'function go(){'
-        'document.getElementById("pw").style.display="block";'
-        'var b=document.getElementById("pb"),l=document.getElementById("pl"),p=0;'
-        'var t=setInterval(function(){p=Math.min(p+Math.random()*7,90);'
-        'b.style.width=p+"%";l.textContent=">> uploading... "+Math.floor(p)+"%";'
-        'if(p>=90)clearInterval(t);},120);}'
+        'var fi=document.getElementById("fi");'
+        'var sub=document.getElementById("sub");'
+        'var pw=document.getElementById("pw");'
+        'fi.addEventListener("change",function(){'
+        '  if(fi.files.length>0){'
+        '    sub.value="[ TRANSMIT: "+fi.files[0].name+" ]";'
+        '    sub.disabled=false;'
+        '  }'
+        '});'
+        'document.getElementById("uf").addEventListener("submit",function(){'
+        '  sub.disabled=true;'
+        '  sub.value="[ TRANSMITTING... ]";'
+        '  pw.style.display="block";'
+        '});'
         '</script>'
     )
     return _page("HOME", body)
@@ -186,6 +203,13 @@ def _fmt(n: int) -> str:
 
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *a): pass  # silence logs
+
+    def handle(self):
+        """Override to suppress ConnectionResetError on Windows."""
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+            pass  # client disconnected — normal on mobile browsers
 
     def _ok(self, body: bytes, ct="text/html; charset=utf-8"):
         self.send_response(200)

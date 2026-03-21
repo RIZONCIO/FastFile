@@ -28,6 +28,7 @@ from core.network import (
 )
 from core.transfer import FileSender, FileReceiver, TransferResult, DOWNLOADS_DIR
 import core.tor_proxy as tor_proxy
+import core.easter_egg as easter_egg
 
 WORK_DIR = Path.home() / ".fastfile"
 
@@ -40,6 +41,7 @@ class P2PNode:
         self.port        = SERVICE_PORT
         self._started    = False
         self._tor_active = False
+        self._egg_tier   = easter_egg.detect_egg(self.alias)
 
         self.registry:  Optional[PeerRegistry]    = None
         self.server:    Optional[P2PServer]        = None
@@ -47,6 +49,14 @@ class P2PNode:
         self.sender:    Optional[FileSender]       = None
         self.receiver:  Optional[FileReceiver]     = None
         self._fingerprint = ""
+
+    def get_file_limits(self):
+        """Returns (max_single_bytes, max_batch_bytes) — boosted for egg aliases."""
+        egg = easter_egg.egg_limits(self.alias)
+        if egg:
+            return egg
+        from core.transfer import MAX_SINGLE_FILE, MAX_BATCH_TOTAL
+        return MAX_SINGLE_FILE, MAX_BATCH_TOTAL
 
     # ── Start ────────────────────────────────────
 
@@ -66,6 +76,9 @@ class P2PNode:
         self.receiver = FileReceiver(on_receive=self._on_file_received)
         self.registry = PeerRegistry(on_new_peer=self._on_new_peer)
 
+        # Show Easter Egg effect at startup if alias matches
+        easter_egg.show_startup_egg(self.alias)
+
         self.server = P2PServer(
             node_id=self.node_id,
             ssl_ctx=server_ctx,
@@ -84,7 +97,12 @@ class P2PNode:
             port=self.port,
         )
         disc_mode = self.discovery.start()
-        self.sender = FileSender(self.node_id, client_ctx)
+        self.sender = FileSender(
+            self.node_id, client_ctx,
+            my_alias=self.alias,
+            max_single=lims[0] if (lims := easter_egg.egg_limits(self.alias)) else None,
+            max_batch =lims[1] if lims else None,
+        )
         self._started = True
 
         result = {
