@@ -21,11 +21,16 @@ if sys.version_info < (3, 8):
 REQUIRED = {
     'cryptography': 'cryptography>=41.0',
     'colorama':     'colorama>=0.4',
-    'netifaces':    'netifaces>=0.11',
     'zeroconf':     'zeroconf>=0.60',
     'stem':         'stem>=1.8',
     'socks':        'PySocks>=1.7',
     'pyzipper':     'pyzipper>=0.3',
+}
+
+# Optional — netifaces needs C compiler on Windows, so we try but don't fail
+OPTIONAL = {
+    'netifaces': 'netifaces>=0.11',
+    'ifaddr':    'ifaddr>=0.1',
 }
 
 _W = 54
@@ -76,6 +81,14 @@ def ensure_dependencies():
     missing = {mod: pkg for mod, pkg in REQUIRED.items() if not _try_import(mod)}
     if not missing:
         print(f"\033[92m[{APP_NAME}] All dependencies OK — starting...\033[0m\n")
+        # Try optional deps silently
+        for mod, pkg in OPTIONAL.items():
+            if not _try_import(mod):
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", pkg,
+                     "--quiet", "--disable-pip-version-check"],
+                    capture_output=True
+                )
         return
 
     os.system('cls' if platform.system() == 'Windows' else 'clear')
@@ -117,6 +130,15 @@ def ensure_dependencies():
             "Press Enter to start FastFile...",
         ], color="\033[92m")
         input()
+
+    # Try optional packages silently — failure is OK
+    for mod, pkg in OPTIONAL.items():
+        if not _try_import(mod):
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", pkg,
+                 "--quiet", "--disable-pip-version-check"],
+                capture_output=True
+            )
 
 
 def main():

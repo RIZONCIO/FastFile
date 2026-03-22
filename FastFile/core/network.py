@@ -25,6 +25,12 @@ except ImportError:
     NETIFACES_AVAILABLE = False
 
 try:
+    import ifaddr
+    IFADDR_AVAILABLE = True
+except ImportError:
+    IFADDR_AVAILABLE = False
+
+try:
     from zeroconf import Zeroconf, ServiceInfo, ServiceBrowser, ServiceListener
     ZEROCONF_AVAILABLE = True
 except ImportError:
@@ -47,9 +53,10 @@ PING_INTERVAL    = 20             # segundos entre pings de keepalive
 # ─────────────────────────────────────────────
 
 def get_local_ips() -> list:
-    """Retorna lista de IPs locais (exceto loopback)"""
+    """Retorna lista de IPs locais — usa netifaces, ifaddr ou socket como fallback."""
     ips = []
 
+    # Method 1: netifaces (best, needs C compiler on Windows)
     if NETIFACES_AVAILABLE:
         try:
             for iface in netifaces.interfaces():
@@ -62,6 +69,19 @@ def get_local_ips() -> list:
         except Exception:
             pass
 
+    # Method 2: ifaddr (pure Python — works on Windows without C compiler)
+    if not ips and IFADDR_AVAILABLE:
+        try:
+            for adapter in ifaddr.get_adapters():
+                for a in adapter.ips:
+                    if a.is_IPv4:
+                        ip = str(a.ip)
+                        if not ip.startswith('127.') and not ip.startswith('169.254.'):
+                            ips.append(ip)
+        except Exception:
+            pass
+
+    # Method 3: socket (always works, may return only one IP)
     if not ips:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -76,7 +96,7 @@ def get_local_ips() -> list:
     if not ips:
         ips.append("127.0.0.1")
 
-    return list(dict.fromkeys(ips))  # dedup mantendo ordem
+    return list(dict.fromkeys(ips))
 
 
 # ─────────────────────────────────────────────

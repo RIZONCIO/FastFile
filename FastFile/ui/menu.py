@@ -232,45 +232,55 @@ def screen_add_peer(node):
     if not node._started:
         warn("Node not started. Use [1] first."); pause(); return
 
-    section("ℹ  When do you need this?")
-    print(f"  {C['DIM']}If both PCs are on the SAME Wi-Fi, they find each other{C['RST']}")
-    print(f"  {C['DIM']}automatically — you don't need this option at all.{C['RST']}")
+    section("ℹ  Same Wi-Fi vs Different networks")
+    print(f"  {C['G']}Same Wi-Fi:{C['RST']}  peers appear in [2] automatically — no action needed.")
     print()
-    print(f"  {C['DIM']}Use this ONLY when the two PCs are in different locations{C['RST']}")
-    print(f"  {C['DIM']}(different houses, different networks).{C['RST']}")
-    print()
-
-    section("🔒  How to connect between different locations")
-    print(f"  {C['DIM']}The safest way is to use Tor (option [1]). With Tor active{C['RST']}")
-    print(f"  {C['DIM']}on BOTH computers, neither side sees the other's real location.{C['RST']}")
-    print()
-    print(f"  {C['DIM']}Another option is a free VPN like Tailscale (tailscale.com).{C['RST']}")
-    print(f"  {C['DIM']}Install it on both PCs, and use the VPN address shown there.{C['RST']}")
+    print(f"  {C['Y']}Different networks{C['RST']}  {C['DIM']}(different cities / homes):{C['RST']}")
+    print(f"  {C['DIM']}  The Node CODE alone is NOT enough — it does not contain{C['RST']}")
+    print(f"  {C['DIM']}  the other person's address. You also need their IP.{C['RST']}")
     print()
 
-    section("📋  How to connect")
-    print(f"  {C['DIM']}1. The other person opens FastFile and goes to [5] Profile.{C['RST']}")
-    print(f"  {C['DIM']}2. They share their CODE (shown under \"Node ID\").{C['RST']}")
-    print(f"  {C['DIM']}3. You paste that code below.{C['RST']}")
+    section("🔌  How to connect between different cities")
+    print(f"  {C['B']}Option A — Tailscale VPN (easiest, free):{C['RST']}")
+    bullet("Both install Tailscale: https://tailscale.com/download")
+    bullet("Both sign in and join the same network")
+    bullet("Use the Tailscale IP (100.x.x.x) shown in the Tailscale app")
     print()
-    info("Same Wi-Fi? No need to do any of this — just check [2] View peers.")
+    print(f"  {C['B']}Option B — Tor (most private):{C['RST']}")
+    bullet("Both enable Tor in [1] Start / Tor")
+    bullet("Still need to exchange IPs through a secure channel first")
+    print()
+    print(f"  {C['B']}Option C — Port forward (advanced):{C['RST']}")
+    bullet("Open TCP port 55771 on your router")
+    bullet("Share your PUBLIC IP (search 'what is my ip' on Google)")
+    bullet("Your public IP is your real address — less private")
     print()
 
-    node_id_input = prompt("Paste the other person's CODE here").strip()
-    if not node_id_input:
+    info("For this session, your CODE is shown in [5] Profile.")
+    info("Share it AND your IP/VPN-IP with the other person.")
+    print()
+
+    ip_input = prompt("Enter the other person's IP address (VPN, public, or Tailscale)").strip()
+    if not ip_input:
         warn("Cancelled."); pause(); return
 
     from core.network import SERVICE_PORT
     try:
-        port = int(prompt("Port (leave default unless told otherwise)", str(SERVICE_PORT)))
+        port = int(prompt("Port", str(SERVICE_PORT)))
     except ValueError:
         err("Invalid port."); pause(); return
 
-    if node.add_peer_by_node_id(node_id_input, port):
-        ok(f"Connected! Looking for peer...")
-        info("Check [2] View peers in about 20 seconds to confirm.")
+    if node.add_peer_by_node_id(ip_input, port):
+        ok(f"Peer address saved: {ip_input}:{port}")
+        info("Check [2] View peers in about 20 seconds to confirm connection.")
+        print()
+        warn("If it doesn't connect, check that:")
+        bullet("Both nodes are started ([1])")
+        bullet("The IP address is correct and reachable")
+        bullet("Port 55771 is not blocked by firewall")
+        bullet("If using Tailscale: both devices are in the same Tailscale network")
     else:
-        err("Could not connect. Make sure the node is started ([1]).")
+        err("Could not add peer. Is the node started?")
     pause()
 
 # ── [4] Send file(s) ──────────────────────────────────────────────────────────
