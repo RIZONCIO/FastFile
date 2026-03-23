@@ -274,13 +274,12 @@ def _recv_and_decrypt(sock: ssl.SSLSocket, dst_path: Path,
 
 class FileSender:
 
-    def __init__(self, my_id: str, ssl_ctx: ssl.SSLContext,
-                 my_alias: str = '', max_single: int = None, max_batch: int = None):
+    def __init__(self, my_id: str, ssl_ctx: ssl.SSLContext, my_alias: str = ''):
         self.my_id      = my_id
         self.my_alias   = my_alias
         self.ssl_ctx    = ssl_ctx
-        self.max_single = max_single or MAX_SINGLE_FILE
-        self.max_batch  = max_batch  or MAX_BATCH_TOTAL
+        self.max_single = MAX_SINGLE_FILE
+        self.max_batch  = MAX_BATCH_TOTAL
 
     def send_single(self, peer: Peer, filepath: Path,
                     on_progress: bool = True) -> TransferRecord:
@@ -439,14 +438,6 @@ class FileReceiver:
                 file_index   = msg.get('file_index', 0)
                 file_count   = msg.get('file_count', 1)
                 sender_alias = msg.get('sender_alias', '')
-
-                # Easter Egg: show Matrix/MrRobot effect on first file of batch
-                if file_index == 0 and sender_alias:
-                    try:
-                        from core.easter_egg import show_receive_egg
-                        show_receive_egg(sender_alias)
-                    except Exception:
-                        pass
 
                 # Accept
                 send_message(sock, {'type': 'accept'})
